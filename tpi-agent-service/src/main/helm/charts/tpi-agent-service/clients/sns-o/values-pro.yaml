@@ -1,0 +1,99 @@
+# Despliegue en entorno de PRO para cliente SNS-O
+enabledReleases:
+  - tpi-agent-service
+
+# Entorno PRO
+environment: pro
+
+# Configuración de Spring
+spring:
+  profiles:
+    name: pro
+
+# Configuración de la imagen Docker
+image:
+  repository: "mtr.devops.telekom.de/genomica/tpi-agent-service"
+  tag: "2026.03.01"
+
+# Configuración del agente TPI
+agent:
+  id: tsupreme-agent-001
+  client: snso
+  env: pro
+  # Montamos la raíz del share en /data
+  # La aplicación detectará automáticamente los sources (subcarpetas de primer nivel)
+  # y creará la estructura /data/{sourceName}/{agentId}/{source,completed,failed,logs}
+  baseDir: /data
+  upload:
+    # Subidas paralelas: 15 threads para PRO (alto rendimiento)
+    # Mejora el rendimiento de 5h a ~35min, prioridad en velocidad
+    concurrentUploads: 15
+
+# Configuración de Kafka con SSL
+kafka:
+  bootstrapServers: kafka-tls-kafka-bootstrap:9093
+  ssl:
+    enabled: true
+    secretName: kafka-tls-secret
+    keystorePassword: ''  # Set via external secret
+    truststorePassword: ''  # Set via external secret
+    keyPassword: ''  # Set via external secret
+
+# Configuración de almacenamiento SMB (Samba)
+storage:
+  enabled: true
+  type: smb
+  smb:
+    enabled: true
+    # IMPORTANTE: estático (PV+PVC) para evitar directorios pvc-*
+    provisioning: static
+    # Ruta UNC proporcionada por Navarra (se normaliza a //host/share en el Deployment)
+    share: "\\\\Dc1gpronas007\\MISEQ_PRO"
+    secretName: "tpi-agent-smb-credentials-pro"
+    domain: "ADMON-CFNAVARRA"
+    username: "SVC_PLATGENOMICA_PRE"
+    password: "XPszASAx5$QGs$"
+
+    # Nombres deterministas
+    pvName: "tpi-agent-service-snso-001-pro-smb-pv"
+    pvcName: "tpi-agent-service-snso-001-pro-smb-pvc"
+    volumeHandle: "tpi-agent-service-snso-001-pro-smb"
+
+# Configuración de AWS S3 para PRO
+# IMPORTANTE: Set credentials via external secret
+aws:
+  accessKeyId: ''  # Set via external secret
+  secretAccessKey: ''  # Set via external secret
+  region: us-east-1
+  s3:
+    bucket: genomica-pro
+    endpoint: http://DC1GPRONAS007.admon-cfnavarra.es:9020
+    basePath: agent/
+    pathStyleAccess: true
+    useSinglePartUpload: true
+
+# Configuración del initContainer
+initContainer:
+  image: mtr.devops.telekom.de/genomica/busybox:1.32.0
+
+# Configuración de la aplicación
+application:
+  name: tpi-agent-service
+  replicas: 1
+
+# Recursos del contenedor
+# Optimizado para subida paralela (15 threads en PRO)
+# Ver features/PARALLEL-UPLOAD-RESOURCES.md para detalles
+resources:
+  limits:
+    memory: 8Gi      # Aumentado de 1.5Gi para soportar 15 threads paralelos
+    cpu: 4000m       # Aumentado de 0.5 para máximo throughput en producción
+  requests:
+    memory: 4Gi      # Base para operación estable con 15 threads
+    cpu: 2000m       # Mínimo para 15 threads en producción
+
+# Configuración del servicio
+service:
+  name: tpi-agent-service
+  type: ClusterIP
+  port: 8080

@@ -1,0 +1,79 @@
+{
+  "name": "M05089_155_000000000-CT8YM",
+  "url": "s3://genomica-pre/agent/tpi-agent-service-snso-001-pre/M05089_155_000000000-CT8YM",
+  "source": {
+    "name": "MISEQ_PRE",
+    "description": null
+  },
+  "files": [
+    {
+      "name": "19-2904_S8_L001_R2_001.fastq.gz",
+      "url": "s3://genomica-pre/agent/tpi-agent-service-snso-001-pre/M05089_155_000000000-CT8YM/19-2904_S8_L001_R2_001.fastq.gz"
+    },
+    {
+      "name": "19-1548_S3_L001_R1_001.fastq.gz",
+      "url": "s3://genomica-pre/agent/tpi-agent-service-snso-001-pre/M05089_155_000000000-CT8YM/19-1548_S3_L001_R1_001.fastq.gz"
+    },
+    {
+      "name": "18-3034_S1_L001_R2_001.fastq.gz",
+      "url": "s3://genomica-pre/agent/tpi-agent-service-snso-001-pre/M05089_155_000000000-CT8YM/18-3034_S1_L001_R2_001.fastq.gz"
+    },
+    {
+      "name": "19-2714_S5_L001_R1_001.fastq.gz",
+      "url": "s3://genomica-pre/agent/tpi-agent-service-snso-001-pre/M05089_155_000000000-CT8YM/19-2714_S5_L001_R1_001.fastq.gz"
+    },
+    {
+      "name": "19-2853_S7_L001_R1_001.fastq.gz",
+      "url": "s3://genomica-pre/agent/tpi-agent-service-snso-001-pre/M05089_155_000000000-CT8YM/19-2853_S7_L001_R1_001.fastq.gz"
+    },
+    {
+      "name": "19-1548_S3_L001_R2_001.fastq.gz",
+      "url": "s3://genomica-pre/agent/tpi-agent-service-snso-001-pre/M05089_155_000000000-CT8YM/19-1548_S3_L001_R2_001.fastq.gz"
+    },
+    {
+      "name": "19-2851_S6_L001_R2_001.fastq.gz",
+      "url": "s3://genomica-pre/agent/tpi-agent-service-snso-001-pre/M05089_155_000000000-CT8YM/19-2851_S6_L001_R2_001.fastq.gz"
+    },
+    {
+      "name": "19-2714_S5_L001_R2_001.fastq.gz",
+      "url": "s3://genomica-pre/agent/tpi-agent-service-snso-001-pre/M05089_155_000000000-CT8YM/19-2714_S5_L001_R2_001.fastq.gz"
+    },
+    {
+      "name": "19-1395_S2_L001_R1_001.fastq.gz",
+      "url": "s3://genomica-pre/agent/tpi-agent-service-snso-001-pre/M05089_155_000000000-CT8YM/19-1395_S2_L001_R1_001.fastq.gz"
+    },
+    {
+      "name": "19-1395_S2_L001_R2_001.fastq.gz",
+      "url": "s3://genomica-pre/agent/tpi-agent-service-snso-001-pre/M05089_155_000000000-CT8YM/19-1395_S2_L001_R2_001.fastq.gz"
+    },
+    {
+      "name": "18-3034_S1_L001_R1_001.fastq.gz",
+      "url": "s3://genomica-pre/agent/tpi-agent-service-snso-001-pre/M05089_155_000000000-CT8YM/18-3034_S1_L001_R1_001.fastq.gz"
+    },
+    {
+      "name": "19-2188_S4_L001_R2_001.fastq.gz",
+      "url": "s3://genomica-pre/agent/tpi-agent-service-snso-001-pre/M05089_155_000000000-CT8YM/19-2188_S4_L001_R2_001.fastq.gz"
+    },
+    {
+      "name": "19-2188_S4_L001_R1_001.fastq.gz",
+      "url": "s3://genomica-pre/agent/tpi-agent-service-snso-001-pre/M05089_155_000000000-CT8YM/19-2188_S4_L001_R1_001.fastq.gz"
+    },
+    {
+      "name": "SampleSheetUsed.csv",
+      "url": "s3://genomica-pre/agent/tpi-agent-service-snso-001-pre/M05089_155_000000000-CT8YM/SampleSheetUsed.csv"
+    },
+    {
+      "name": "19-2853_S7_L001_R2_001.fastq.gz",
+      "url": "s3://genomica-pre/agent/tpi-agent-service-snso-001-pre/M05089_155_000000000-CT8YM/19-2853_S7_L001_R2_001.fastq.gz"
+    },
+    {
+      "name": "19-2904_S8_L001_R1_001.fastq.gz",
+      "url": "s3://genomica-pre/agent/tpi-agent-service-snso-001-pre/M05089_155_000000000-CT8YM/19-2904_S8_L001_R1_001.fastq.gz"
+    },
+    {
+      "name": "19-2851_S6_L001_R1_001.fastq.gz",
+      "url": "s3://genomica-pre/agent/tpi-agent-service-snso-001-pre/M05089_155_000000000-CT8YM/19-2851_S6_L001_R1_001.fastq.gz"
+    }
+  ],
+  "folders": []
+}

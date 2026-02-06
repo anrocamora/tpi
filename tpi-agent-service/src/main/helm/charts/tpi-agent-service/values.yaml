@@ -1,0 +1,145 @@
+metadata:
+  namespace: tpi
+  labels:
+    app: tpi-agent-service
+
+application:
+  name: tpi-agent-service
+  replicas: 1
+
+# Configuración de la imagen Docker
+image:
+  repository: mtr.devops.telekom.de/genomica/tpi-agent-service
+  tag: latest
+  pullPolicy: IfNotPresent
+
+# Configuración del agente TPI
+agent:
+  id: tsupreme-agent-001
+  client: default
+  env: dev
+  baseDir: /data/tsupreme-agent-001
+  # Nombre de la fuente (padre) que agrupa runs (p.ej. MISEQ_PRE). No inferir.
+  sourceName: ""
+
+# Configuración de Spring
+spring:
+  profiles:
+    name: default
+
+# Configuración de Kafka
+kafka:
+  bootstrapServers: kafka:9092
+  ssl:
+    enabled: false
+    secretName: kafka-tls-secret
+    keystorePassword: ""
+    truststorePassword: ""
+    keyPassword: ""
+
+# Configuración de almacenamiento
+storage:
+  enabled: false
+  # Tipo de almacenamiento:
+  # - smb (por defecto)
+  # - nfs
+  # - local (emptyDir dentro del Pod)
+  type: smb
+  smb:
+    enabled: true
+    # Modo de aprovisionamiento del volumen:
+    # - dynamic: crea StorageClass + PVC (sin PV explícito) (por defecto)
+    # - static: crea PV + PVC como hasta ahora
+    provisioning: dynamic
+
+    # Ruta UNC tal como la proporciona el cliente (se normaliza en la plantilla a //host/share)
+    share: ""
+
+    # Secret (gestionado por Helm) con las credenciales SMB
+    secretName: "tpi-agent-smb-credentials"
+
+    # Nombre del PVC a montar. Si no se especifica, se genera como <application.name>-smb-pvc
+    pvcName: ""
+
+    # --- Parámetros del aprovisionamiento dinámico (StorageClass) ---
+    # Nombre de la StorageClass: por defecto "<release-name>-smb".
+    storageClassName: ""
+    # ReclaimPolicy para el PV aprovisionado dinámicamente.
+    # Delete: borra el PV al borrar el PVC (recomendado)
+    # Retain: mantiene el PV
+    reclaimPolicy: Delete
+    # Opcional: volumenBindingMode (por ejemplo: Immediate o WaitForFirstConsumer)
+    volumeBindingMode: ""
+    # mountOptions que se usaban en el PV estático
+    mountOptions:
+      - dir_mode=0777
+      - file_mode=0777
+      - vers=3.0
+
+    # --- Fallback estático (PV/PVC) ---
+    # Si provisioning=static, estos valores aplican.
+    pvName: ""
+    # Identificador único del volumen para el CSI driver. Por defecto <application.name>-smb
+    volumeHandle: ""
+
+    # Tamaño lógico requerido por Kubernetes (no limita el share SMB). Ej: "100Gi"
+    size: "10Gi"
+
+    # Dominio/Workgroup (opcional). Ej: "ADMON-CFNAVARRA"
+    domain: ""
+    username: ""
+    password: ""
+
+  # Configuración NFS (solo si storage.type=nfs)
+  nfs:
+    enabled: false
+    # server y path del export NFS
+    server: ""
+    path: ""
+
+    # Nombre del PVC a montar. Si no se especifica, se genera como <application.name>-nfs-pvc
+    pvcName: ""
+
+    # Tamaño lógico requerido por Kubernetes
+    size: "10Gi"
+
+    # Opcional: nombre de StorageClass existente (si el cluster tiene provisioner NFS)
+    storageClassName: ""
+
+    # Modo estático opcional (crea PV+PVC nfs)
+    provisioning: static
+
+  # Configuración local (solo si storage.type=local)
+  local:
+    enabled: false
+    # Por defecto usa emptyDir. Se pueden añadir opciones aquí en el futuro.
+
+# Configuración de AWS S3
+aws:
+  accessKeyId: ""
+  secretAccessKey: ""
+  region: eu-south-2
+  s3:
+    bucket: ""
+    endpoint: https://s3.eu-south-2.amazonaws.com
+    basePath: agent/
+    pathStyleAccess: false
+
+# Configuración del initContainer
+initContainer:
+  image: mtr.devops.telekom.de/genomica/busybox:1.32.0
+
+# Recursos del contenedor
+resources:
+  limits:
+    memory: 1.5Gi
+    cpu: 0.5
+  requests:
+    memory: 512Mi
+    cpu: 0.5
+
+# Configuración del servicio
+service:
+  name: tpi-agent-service
+  type: ClusterIP
+  port: 8080

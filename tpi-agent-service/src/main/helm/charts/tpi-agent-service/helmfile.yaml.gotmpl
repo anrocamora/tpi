@@ -1,0 +1,38 @@
+# src/main/helm/charts/tpi-agent-service/helmfile.yaml.gotmpl
+
+# (1) Definición de opciones globales de Helm
+helmDefaults:
+  timeout: 2700
+  wait: true
+  atomic: true
+  # Permite a Helm crear automáticamente el namespace si no existe
+  createNamespace: true
+  # usar el mismo contexto de kubectl que haya configurado en el pipeline
+  kubeContext: {{ env "KUBECONTEXT" }}
+
+# (2) Repositorios de charts (si usas un repo remoto)
+{{- /* Solo incluir el repositorio remoto si no se usan charts locales */ -}}
+{{- if not .StateValues.useLocalCharts }}
+repositories:
+  - name: genomica
+    url: https://harbor.apps.ocpdes.t-systems.es/chartrepo/genomica
+{{- end }}
+
+---
+# (3) Definición de releases
+releases:
+  - name: tpi-agent-service
+    namespace: tpi
+    {{- if not .StateValues.useLocalCharts }}
+    chart: "genomica/tpi-agent-service"
+    {{- else }}
+    chart: "."
+    {{- end }}
+
+    # Aquí le dices a Helmfile qué archivos de valores pasar
+    values:
+      - ./values-common.yaml
+      {{- if .StateValues.client }}
+      - ./clients/{{ .StateValues.client }}/values-{{ .Environment.Name }}.yaml
+      {{- end }}
+

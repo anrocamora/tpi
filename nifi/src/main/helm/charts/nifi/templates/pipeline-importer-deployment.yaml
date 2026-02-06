@@ -1,0 +1,156 @@
+{{- $pi := (index .Values "pipelineImporter") | default dict -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "nifi.fullname" . }}-pipeline-importer
+  namespace: {{ include "nifi.namespace" . }}
+  labels:
+    {{- include "nifi.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "nifi.fullname" . }}-pipeline-importer
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ include "nifi.fullname" . }}-pipeline-importer
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      restartPolicy: Always
+      imagePullSecrets:
+        - name: mtr-credentials
+      initContainers:
+        - name: wait-for-nifi
+          image: {{ .Values.global.imageRegistry }}/alpine-git-curl-jq:1.0.0
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/bash
+            - -c
+            - |
+              NIFI_URL="https://{{ include "nifi.fullname" . }}-node-default-0.{{ include "nifi.fullname" . }}-node-default.{{ include "nifi.namespace" . }}.svc.cluster.local:8443"
+              echo "Esperando a NiFi..."
+              until curl -k -s -f -o /dev/null "$NIFI_URL/nifi-api/access/config" 2>/dev/null; do
+                sleep 300
+              done
+              echo "NiFi disponible!"
+      containers:
+        - name: pipeline-importer
+          image: {{ .Values.global.imageRegistry }}/alpine-git-curl-jq:1.0.0
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: GIT_REPO
+              value: {{ index $pi "gitRepo" | default "" | quote }}
+            - name: GIT_BRANCH
+              value: {{ index $pi "gitBranch" | default "main" | quote }}
+            - name: PIPELINES_PATH
+              value: {{ index $pi "pipelinesPath" | default "" | quote }}
+            - name: POLL_INTERVAL
+              value: {{ index $pi "pollInterval" | default "60" | quote }}
+            - name: GIT_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "nifi.fullname" . }}-git-credentials
+                  key: username
+            - name: GIT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "nifi.fullname" . }}-git-credentials
+                  key: password
+          command:
+            - /bin/bash
+            - -c
+            - |
+              # Construir URL con credenciales si existen
+              if [ -n "$GIT_USERNAME" ] && [ -n "$GIT_PASSWORD" ]; then
+                REPO_URL=$(echo "$GIT_REPO" | sed "s|https://|https://${GIT_USERNAME}:${GIT_PASSWORD}@|")
+              else
+                REPO_URL="$GIT_REPO"
+              fi
+              
+              LAST_COMMIT=""
+              
+              fetch_and_import() {
+                echo ""
+                echo "========================================================"
+                echo "$(date '+%Y-%m-%d %H:%M:%S') - Sincronizando pipelines..."
+                echo "========================================================"
+              
+                rm -rf /tmp/repo
+                cd /tmp
+              
+                if ! git clone --depth 1 --branch "$GIT_BRANCH" "$REPO_URL" repo 2>/dev/null; then
+                  echo "ERROR: No se pudo clonar el repositorio"
+                  return 1
+                fi
+              
+                cd repo
+                CURRENT_COMMIT=$(git rev-parse HEAD)
+              
+                if [ "$CURRENT_COMMIT" = "$LAST_COMMIT" ]; then
+                  echo "Sin cambios (commit: ${CURRENT_COMMIT:0:8})"
+                  return 0
+                fi
+              
+                echo "Nuevo commit detectado: ${CURRENT_COMMIT:0:8}"
+              
+                if [ -d "$PIPELINES_PATH" ]; then
+                  rm -f /pipelines/*.json
+                  cp $PIPELINES_PATH/*.json /pipelines/ 2>/dev/null || true
+              
+                  echo "Pipelines actualizadas:"
+                  ls -la /pipelines/
+              
+                  echo ""
+                  echo "Ejecutando importación a NiFi..."
+                  /scripts/import-pipelines.sh
+              
+                  LAST_COMMIT="$CURRENT_COMMIT"
+                  echo ""
+                  echo "Importación completada"
+                else
+                  echo "ERROR: No se encontró $PIPELINES_PATH"
+                  return 1
+                fi
+              }
+              
+              echo "=== NiFi Pipeline Importer ==="
+              echo "Repo: $GIT_REPO"
+              echo "Branch: $GIT_BRANCH"
+              echo "Path: $PIPELINES_PATH"
+              echo "Poll interval: ${POLL_INTERVAL}s"
+              echo ""
+              
+              # Primera ejecución
+              fetch_and_import
+              
+              # Loop de polling
+              echo ""
+              echo "Entrando en modo polling (cada ${POLL_INTERVAL}s)..."
+              while true; do
+                sleep "$POLL_INTERVAL"
+                fetch_and_import
+              done
+          volumeMounts:
+            - name: scripts
+              mountPath: /scripts
+            - name: pipelines
+              mountPath: /pipelines
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "256Mi"
+              cpu: "200m"
+      volumes:
+        - name: scripts
+          configMap:
+            name: {{ include "nifi.fullname" . }}-pipeline-import
+            defaultMode: 0755
+        - name: pipelines
+          emptyDir: {}
+

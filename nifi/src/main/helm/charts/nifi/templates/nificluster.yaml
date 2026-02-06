@@ -1,0 +1,98 @@
+{{- if .Values.nifi.cluster.enabled }}
+---
+apiVersion: nifi.stackable.tech/v1alpha1
+kind: NifiCluster
+metadata:
+  name: {{ include "nifi.fullname" . }}
+  namespace: {{ include "nifi.namespace" . }}
+  labels:
+    {{- include "nifi.labels" . | nindent 4 }}
+spec:
+  image:
+    productVersion: {{ .Values.nifi.image.tag | quote }}
+    pullPolicy: {{ .Values.nifi.image.pullPolicy }}
+  clusterConfig:
+    listenerClass: {{ .Values.nifi.listenerClass | default "cluster-internal" | quote }}
+    {{- if .Values.nifi.auth.singleUser.enabled }}
+    authentication:
+      - authenticationClass: {{ .Values.nifi.auth.singleUser.authenticationClass | default (printf "%s-single-user-authentication" (include "nifi.fullname" .)) | quote }}
+    {{- end }}
+    sensitiveProperties:
+      keySecret: {{ .Values.nifi.sensitiveProperties.keySecret | default (printf "%s-sensitive-property-key" (include "nifi.fullname" .)) | quote }}
+      {{- if .Values.nifi.sensitiveProperties.autoGenerate }}
+      autoGenerate: {{ .Values.nifi.sensitiveProperties.autoGenerate }}
+      {{- else }}
+      autoGenerate: true
+      {{- end }}
+    zookeeperConfigMapName: {{ include "nifi.fullname" . }}-znode
+  nodes:
+    roleGroups:
+      default:
+        replicas: {{ .Values.nifi.cluster.replicas | default 1 }}
+        config:
+          resources:
+            cpu:
+              min: {{ .Values.nifi.resources.cpu.min | default "500m" | quote }}
+              max: {{ .Values.nifi.resources.cpu.max | default "2000m" | quote }}
+            memory:
+              limit: {{ .Values.nifi.resources.memory.limit | default "4Gi" | quote }}
+            storage:
+              contentRepo:
+                capacity: {{ .Values.nifi.storage.contentRepo.capacity | default "10Gi" | quote }}
+                {{- if .Values.nifi.storage.contentRepo.storageClass }}
+                storageClass: {{ .Values.nifi.storage.contentRepo.storageClass | quote }}
+                {{- end }}
+              flowfileRepo:
+                capacity: {{ .Values.nifi.storage.flowfileRepo.capacity | default "2Gi" | quote }}
+                {{- if .Values.nifi.storage.flowfileRepo.storageClass }}
+                storageClass: {{ .Values.nifi.storage.flowfileRepo.storageClass | quote }}
+                {{- end }}
+              provenanceRepo:
+                capacity: {{ .Values.nifi.storage.provenanceRepo.capacity | default "3Gi" | quote }}
+                {{- if .Values.nifi.storage.provenanceRepo.storageClass }}
+                storageClass: {{ .Values.nifi.storage.provenanceRepo.storageClass | quote }}
+                {{- end }}
+              databaseRepo:
+                capacity: {{ .Values.nifi.storage.databaseRepo.capacity | default "1Gi" | quote }}
+                {{- if .Values.nifi.storage.databaseRepo.storageClass }}
+                storageClass: {{ .Values.nifi.storage.databaseRepo.storageClass | quote }}
+                {{- end }}
+              stateRepo:
+                capacity: {{ .Values.nifi.storage.stateRepo.capacity | default "1Gi" | quote }}
+                {{- if .Values.nifi.storage.stateRepo.storageClass }}
+                storageClass: {{ .Values.nifi.storage.stateRepo.storageClass | quote }}
+                {{- end }}
+        {{- if .Values.nifi.configOverrides }}
+        configOverrides:
+          {{- toYaml .Values.nifi.configOverrides | nindent 10 }}
+        {{- end }}
+        {{- $needPodOverrides := false }}
+        {{- if and .Values.global (hasKey .Values.global "imagePullSecrets") .Values.global.imagePullSecrets }}
+        {{- $needPodOverrides = true }}
+        {{- end }}
+        {{- if and .Values.nifi.podResources .Values.nifi.podResources.enabled }}
+        {{- $needPodOverrides = true }}
+        {{- end }}
+
+        {{- if $needPodOverrides }}
+        podOverrides:
+          spec:
+            {{- if and .Values.global (hasKey .Values.global "imagePullSecrets") .Values.global.imagePullSecrets }}
+            imagePullSecrets:
+              {{- include "nifi.imagePullSecrets" . | nindent 14 }}
+            {{- end }}
+            {{- if and .Values.nifi.podResources .Values.nifi.podResources.enabled }}
+            containers:
+              - name: {{ .Values.nifi.podResources.containerName | default "nifi" | quote }}
+                resources:
+                  {{- if .Values.nifi.podResources.requests }}
+                  requests:
+                    {{- toYaml .Values.nifi.podResources.requests | nindent 20 }}
+                  {{- end }}
+                  {{- if .Values.nifi.podResources.limits }}
+                  limits:
+                    {{- toYaml .Values.nifi.podResources.limits | nindent 20 }}
+                  {{- end }}
+            {{- end }}
+        {{- end }}
+  {{- end }}

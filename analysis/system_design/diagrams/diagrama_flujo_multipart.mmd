@@ -1,0 +1,39 @@
+sequenceDiagram
+    participant S3 as S3 Client
+    participant MP as Multipart Upload
+    participant File as File System
+
+    Note over S3,File: Upload Multipart Flow
+
+    rect rgb(230, 245, 255)
+        Note right of S3: 1. CreateMultipartUpload
+        S3->>MP: CreateMultipartUploadRequest
+        Note right of MP: Bucket: genomica-s3-eu-south-2<br/>Key: agent/MiSeq/agent-001/run-123/file.fastq.gz
+        MP-->>S3: uploadId
+    end
+
+    rect rgb(240, 255, 240)
+        Note right of S3: 2. Upload Parts (ej: 64 MB cada una)
+
+        loop Por cada parte
+            File->>S3: Leer parte del fichero
+            Note right of File: Part 1: bytes 0-67108864<br/>Part 2: bytes 67108864-134217728<br/>...
+            S3->>MP: UploadPartRequest
+            Note right of MP: uploadId<br/>partNumber: N<br/>RequestBody: bytes<br/>@Retryable (3 intentos)
+            MP-->>S3: eTag
+        end
+    end
+
+    rect rgb(255, 250, 230)
+        Note right of S3: 3. CompleteMultipartUpload
+        S3->>MP: CompleteMultipartUploadRequest
+        Note right of MP: uploadId<br/>CompletedParts: [eTag1, eTag2, ..., eTagN]
+        MP-->>S3: 200 OK (fichero consolidado)
+    end
+
+    rect rgb(255, 240, 240)
+        Note right of S3: 4. Si error: AbortMultipartUpload
+        S3->>MP: AbortMultipartUploadRequest
+        Note right of MP: uploadId
+        MP-->>S3: Partes eliminadas
+    end

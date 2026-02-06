@@ -1,0 +1,26 @@
+agent:
+  upload:
+    agent-id: test-agent
+    source-directory: /tmp/test-uploads
+    storage-backend-id: test-backend
+    part-size-mi-b: 64
+    scan-interval-ms: 30000
+    events-topic: test.topic
+
+storage:
+  backends:
+    - id: test-backend
+      type: AWS
+      bucket: test-bucket
+      base-path: /test
+      region: us-east-1
+      endpoint: http://localhost:9000
+      path-style-access: true
+
+spring:
+  kafka:
+    bootstrap-servers: localhost:9092
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+

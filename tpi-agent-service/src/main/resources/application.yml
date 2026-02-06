@@ -1,0 +1,122 @@
+spring:
+  application:
+    name: tpi-agent-service
+  output:
+    ansi:
+      enabled: always
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9094}
+    producer:
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      properties:
+        enable.idempotence: true
+        acks: all
+        # Configuración para mensajes grandes (20MB)
+        max.request.size: ${KAFKA_MAX_REQUEST_SIZE:20971520}
+        # Buffer de memoria aumentado a 100MB para manejar múltiples mensajes grandes simultáneamente
+        buffer.memory: ${KAFKA_BUFFER_MEMORY:104857600}
+    consumer:
+      group-id: ${AGENT_ID:tpi-agent-local}-state
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      auto-offset-reset: earliest
+      properties:
+        spring.json.trusted.packages: "*"
+        # Configuración para mensajes grandes (20MB)
+        max.partition.fetch.bytes: ${KAFKA_MAX_PARTITION_FETCH_BYTES:20971520}
+        fetch.max.bytes: ${KAFKA_FETCH_MAX_BYTES:52428800}
+    properties:
+      # SSL/TLS Configuration for Kafka
+      security.protocol: ${KAFKA_SECURITY_PROTOCOL:PLAINTEXT}
+      ssl.truststore.location: ${KAFKA_SSL_TRUSTSTORE_LOCATION:}
+      ssl.truststore.password: ${KAFKA_SSL_TRUSTSTORE_PASSWORD:}
+      ssl.truststore.type: ${KAFKA_SSL_TRUSTSTORE_TYPE:JKS}
+      ssl.keystore.location: ${KAFKA_SSL_KEYSTORE_LOCATION:}
+      ssl.keystore.password: ${KAFKA_SSL_KEYSTORE_PASSWORD:}
+      ssl.keystore.type: ${KAFKA_SSL_KEYSTORE_TYPE:JKS}
+      ssl.key.password: ${KAFKA_SSL_KEY_PASSWORD:}
+      ssl.endpoint.identification.algorithm: ${KAFKA_SSL_ENDPOINT_IDENTIFICATION_ALGORITHM:https}
+
+storage:
+  backends:
+    - id: DEFAULT
+      type: AWS
+      bucket: ${AWS_S3_BUCKET:genomica-s3-eu-south-2}
+      basePath: ${AWS_S3_BASE_PATH:agent/}
+      region: ${AWS_REGION:eu-south-2}
+      endpoint: ${AWS_S3_ENDPOINT:https://s3.eu-south-2.amazonaws.com}
+      pathStyleAccess: ${AWS_PATH_STYLE_ACCESS:false}
+      # HTTP timeout configuration (in seconds)
+      # For Dell PowerScale/ECS, use higher values to allow CompleteMultipartUpload
+      # to finish large file consolidations (can take several minutes or more)
+      # Increased to 30 minutes (1800s) to handle slow PowerScale consolidation
+      connectionTimeoutSeconds: ${AWS_CONNECTION_TIMEOUT_SECONDS:60}
+      readTimeoutSeconds: ${AWS_READ_TIMEOUT_SECONDS:1800}
+      apiCallTimeoutSeconds: ${AWS_API_CALL_TIMEOUT_SECONDS:1800}
+      # Dell PowerScale workaround: Use PutObject instead of multipart upload
+      # Set to true for Dell PowerScale backends that have broken completeMultipartUpload
+      useSinglePartUpload: ${AWS_USE_SINGLE_PART_UPLOAD:false}
+      # Consolidation validation configuration (for Dell PowerScale/ECS)
+      # IMPORTANT: Dell ECS consolidates objects in SECONDS, not minutes!
+      # The 400 "MalformedXML" error means the object IS consolidating/consolidated
+      # We just need to wait a SHORT time for it to become available
+
+      # Maximum time to wait for object to become available (in seconds)
+      # Dell ECS typically needs 5-30 seconds for large files
+      consolidationMaxWaitSeconds: ${AWS_CONSOLIDATION_MAX_WAIT_SECONDS:60}
+
+      # Maximum number of validation retries with exponential backoff
+      consolidationMaxRetries: ${AWS_CONSOLIDATION_MAX_RETRIES:30}
+
+      # Initial delay between validation retries - START SMALL
+      # Dell ECS usually has the object ready in 1-5 seconds
+      consolidationInitialDelaySeconds: ${AWS_CONSOLIDATION_INITIAL_DELAY_SECONDS:1}
+
+      # Maximum delay between validation retries (caps exponential backoff)
+      # Even for large files, Dell ECS doesn't need more than 5-10 seconds between retries
+      consolidationMaxDelaySeconds: ${AWS_CONSOLIDATION_MAX_DELAY_SECONDS:5}
+
+agent:
+  upload:
+    agent-id: ${AGENT_ID:tsupreme_agent_001}
+    client: ${AGENT_CLIENT:snso}
+    env: ${AGENT_ENV:dev}
+    inbox-directory: ${AGENT_INBOX_DIR:C:/${AGENT_ID:tsupreme_agent_001}/data}
+    storage-backend-id: ${AGENT_STORAGE_BACKEND:DEFAULT}
+    part-size-mi-b: ${AGENT_PART_SIZE_MB:64}
+    scan-interval-ms: ${AGENT_SCAN_INTERVAL_MS:30000}
+    events-topic: ${AGENT_EVENTS_TOPIC:tpi.uploads.${AGENT_ID:tsupreme_agent_001}.events.v1}
+    state-topic: ${AGENT_STATE_TOPIC:tpi.uploads.${AGENT_ID:tsupreme_agent_001}.state.v1}
+    max-retries: ${AGENT_MAX_RETRIES:3}
+    retry-backoff-ms: ${AGENT_RETRY_BACKOFF_MS:1000}
+    max-retry-backoff-ms: ${AGENT_MAX_RETRY_BACKOFF_MS:30000}
+    resumption-max-age-hours: ${AGENT_RESUMPTION_MAX_AGE_HOURS:24}
+    # Progress reporting for single-part uploads (when useSinglePartUpload=true)
+    # Report progress every N seconds (default: 30)
+    progress-report-interval-seconds: ${PROGRESS_REPORT_INTERVAL_SECONDS:30}
+    # Minimum percentage change to report (default: 10.0)
+    progress-min-percentage-change: ${PROGRESS_MIN_PERCENTAGE_CHANGE:10.0}
+    file-stability-window-ms: ${AGENT_FILE_STABILITY_WINDOW_MS:60000}
+    move-directory-datasets: ${AGENT_MOVE_DIRECTORY_DATASETS:false}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  server:
+    port: 8080
+
+server:
+  port: 8080
+
+# Swagger/OpenAPI (genérico): habilitado por defecto y limitado a la API pública
+springdoc:
+  paths-to-match: /api/v1/**
+  api-docs:
+    enabled: true
+    path: /v3/api-docs
+  swagger-ui:
+    enabled: true
+    path: /swagger-ui.html

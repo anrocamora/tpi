@@ -1,0 +1,36 @@
+---
+{{- if and .Values.storage.enabled (eq (.Values.storage.type | default "smb") "nfs") -}}
+{{- if .Values.storage.nfs.enabled | default true -}}
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: {{ printf "%s-nfs-pv" .Values.application.name | quote }}
+  labels:
+    app: {{ .Values.application.name }}
+spec:
+  capacity:
+    storage: {{ default "10Gi" .Values.storage.nfs.size | quote }}
+  accessModes:
+    - ReadWriteMany
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ""
+  nfs:
+    server: {{ required "storage.nfs.server es obligatorio cuando storage.type=nfs" .Values.storage.nfs.server | quote }}
+    path: {{ required "storage.nfs.path es obligatorio cuando storage.type=nfs" .Values.storage.nfs.path | quote }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ default (printf "%s-nfs-pvc" .Values.application.name) .Values.storage.nfs.pvcName | quote }}
+  namespace: {{ .Values.metadata.namespace }}
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: ""
+  volumeName: {{ printf "%s-nfs-pv" .Values.application.name | quote }}
+  resources:
+    requests:
+      storage: {{ default "10Gi" .Values.storage.nfs.size | quote }}
+{{- end }}
+{{- end }}
+

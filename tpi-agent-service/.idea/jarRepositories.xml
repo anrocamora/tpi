@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="RemoteRepositoriesConfiguration">
+    <remote-repository>
+      <option name="id" value="maven-genomica" />
+      <option name="name" value="maven-genomica" />
+      <option name="url" value="https://setools.t-systems.es/nexus/repository/maven-genomica/" />
+    </remote-repository>
+    <remote-repository>
+      <option name="id" value="maven-alba-salut-release" />
+      <option name="name" value="maven-alba-salut-release" />
+      <option name="url" value="http://setools.t-systems.es/nexus/repository/maven-alba-salut-release/" />
+    </remote-repository>
+    <remote-repository>
+      <option name="id" value="canigo" />
+      <option name="name" value="canigo" />
+      <option name="url" value="https://sic.ctti.extranet.gencat.cat/nexus/content/groups/canigo-group-maven2/" />
+    </remote-repository>
+    <remote-repository>
+      <option name="id" value="maven-public" />
+      <option name="name" value="maven-public" />
+      <option name="url" value="https://setools.t-systems.es/nexus/repository/maven-public/" />
+    </remote-repository>
+    <remote-repository>
+      <option name="id" value="central" />
+      <option name="name" value="central" />
+      <option name="url" value="https://setools.t-systems.es/nexus/repository/maven-public/" />
+    </remote-repository>
+    <remote-repository>
+      <option name="id" value="better-ehr" />
+      <option name="name" value="Better Platform Repository" />
+      <option name="url" value="https://hub.better.care/artifactory/better-releases" />
+    </remote-repository>
+    <remote-repository>
+      <option name="id" value="central" />
+      <option name="name" value="Maven Central repository" />
+      <option name="url" value="https://repo1.maven.org/maven2" />
+    </remote-repository>
+    <remote-repository>
+      <option name="id" value="jboss.community" />
+      <option name="name" value="JBoss Community repository" />
+      <option name="url" value="https://repository.jboss.org/nexus/content/repositories/public/" />
+    </remote-repository>
+    <remote-repository>
+      <option name="id" value="maven-alba-salut-thirdparty" />
+      <option name="name" value="maven-alba-salut-thirdparty" />
+      <option name="url" value="https://setools.t-systems.es/nexus/repository/maven-alba-salut-thirdparty/" />
+    </remote-repository>
+    <remote-repository>
+      <option name="id" value="confluent" />
+      <option name="name" value="confluent" />
+      <option name="url" value="https://packages.confluent.io/maven/" />
+    </remote-repository>
+  </component>
+</project>

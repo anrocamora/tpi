@@ -1,0 +1,75 @@
+graph TB
+    subgraph Origen["ORIGEN DE DATOS"]
+        Seq[Secuenciador<br/>MiSeq/NextSeq]
+        User[Usuario Operador]
+        Share[Unidad de Red<br/>\\DC1GPRONAS007\MISEQ_PRE]
+    end
+
+    subgraph AgentLayer["CAPA DE AGENTE"]
+        Agent[TPI Agent Service<br/>Spring Boot 3.2.5 + Java 24<br/>Threads: 10 paralelos]
+    end
+
+    subgraph Storage["ALMACENAMIENTO"]
+        S3[THealthLake S3<br/>genomica-s3-eu-south-2<br/>Landing: agent/source_id/agent_id/]
+    end
+
+    subgraph Messaging["MENSAJERÍA"]
+        KafkaEvents[Kafka Topic Events<br/>tpi.uploads.*.events.v1<br/>Retención: 7 días]
+        KafkaState[Kafka Topic State<br/>tpi.uploads.*.state.v1<br/>Compactado: infinito]
+    end
+
+    subgraph Orchestration["ORQUESTACIÓN"]
+        Airflow[Airflow DAG<br/>DAG_TSUPREME_001_TPIAGENT_UPLOADS<br/>Start/Monitor/Stop NiFi]
+    end
+
+    subgraph Processing["PROCESAMIENTO"]
+        NiFi[NiFi Pipeline<br/>PG_TSUPREME_001_TPIAGENT_UPLOADS<br/>v1.27.0]
+        Cache[DistributedMapCache<br/>Token JWT + Sync]
+    end
+
+    subgraph Catalog["CATÁLOGO"]
+        Tomic[Tomic/OpenCGA API<br/>REST API v4<br/>DEV: tomic.tsupreme.com<br/>PRE: pregenomica-app]
+        DB[(TCatalog DB<br/>OpenCGA)]
+    end
+
+    subgraph Users["USUARIOS FINALES"]
+        Analyst[Analista/Clínico<br/>Consulta datos]
+    end
+
+    %% Flujo UC-DS-001: Subida
+    Seq -.->|Genera run| Share
+    User -.->|Copia manual| Share
+    Share -->|Escaneo 30s| Agent
+    Agent -->|Multipart Upload| S3
+    Agent -->|UPLOAD_STARTED<br/>UPLOAD_PROGRESS<br/>UPLOAD_COMPLETED| KafkaEvents
+    Agent -->|Snapshot estado| KafkaState
+
+    %% Flujo UC-DS-002: Catalogación
+    Airflow -.->|Start/Stop| NiFi
+    NiFi -->|Consume eventos| KafkaEvents
+    NiFi <-->|Cache token<br/>Wait/Notify| Cache
+    NiFi -->|Login<br/>Create Dirs<br/>Link Files<br/>Update Tags| Tomic
+    Tomic --> DB
+
+    %% Consulta
+    Analyst -.->|Buscar ficheros| DB
+    Analyst -.->|Montar unidad| S3
+
+    %% Estilos
+    classDef origem fill:#e1f5ff,stroke:#0277bd
+    classDef agent fill:#c8e6c9,stroke:#388e3c
+    classDef storage fill:#fff9c4,stroke:#f57c00
+    classDef messaging fill:#f8bbd0,stroke:#c2185b
+    classDef orchestration fill:#ce93d8,stroke:#7b1fa2
+    classDef processing fill:#b39ddb,stroke:#512da8
+    classDef catalog fill:#ffccbc,stroke:#d84315
+    classDef users fill:#b0bec5,stroke:#455a64
+
+    class Seq,User,Share origem
+    class Agent agent
+    class S3 storage
+    class KafkaEvents,KafkaState messaging
+    class Airflow orchestration
+    class NiFi,Cache processing
+    class Tomic,DB catalog
+    class Analyst users

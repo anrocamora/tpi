@@ -1,0 +1,15 @@
+{{- if .Values.nifi.auth.singleUser.enabled }}
+---
+apiVersion: authentication.stackable.tech/v1alpha1
+kind: AuthenticationClass
+metadata:
+  name: {{ .Values.nifi.auth.singleUser.authenticationClass | default (printf "%s-single-user-authentication" (include "nifi.fullname" .)) }}
+  labels:
+    {{ include "nifi.labels" . | nindent 4 }}
+spec:
+  provider:
+    static:
+      userCredentialsSecret:
+        name: {{ .Values.nifi.auth.singleUser.secretName | default (printf "%s-single-user" (include "nifi.fullname" .)) }}
+{{- end }}
+

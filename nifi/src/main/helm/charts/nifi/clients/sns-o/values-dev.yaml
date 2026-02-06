@@ -1,0 +1,106 @@
+# Despliegue en entorno de desarrollo
+enabledReleases:
+  - nifi
+
+# entorno development
+environment: dev
+
+# aquí overrides específicos de dev (replicas, resources, etc.)
+nifi:
+  podResources:
+    enabled: true
+    containerName: "nifi"
+    requests:
+      cpu: "500m"
+      memory: "4Gi"
+    limits:
+      cpu: "2"
+      memory: "8Gi"
+
+  cluster:
+    enabled: true
+    replicas: 1
+
+  # CRÍTICO: Agregar TODOS los posibles hostnames
+  configOverrides:
+    nifi.properties:
+      nifi.web.https.host: nifi-node-default-0.nifi-node-default.tpi.svc.cluster.local
+      nifi.web.https.context.path: /nifi
+      nifi.web.proxy.host: >-
+        localhost:8443,
+        localhost,
+        127.0.0.1,
+        nifi.tsupreme.com,
+        nifi.tsupreme.com:443,
+        nifi-node-default-0.nifi-node-default.tpi.svc.cluster.local:8443,
+        nifi-node-default-0.nifi-node-default.tpi.svc.cluster.local,
+        nifi-node-default.tpi.svc.cluster.local:8443,
+        nifi-node-default.tpi.svc.cluster.local,
+        nifi.tpi.svc.cluster.local:8443,
+        nifi.tpi.svc.cluster.local,
+        nifi-reporting-task.tpi.svc.cluster.local:8443,
+        nifi-reporting-task.tpi.svc.cluster.local
+
+  resources:
+    cpu:
+      min: "500m"
+      max: "2000m"
+    memory:
+      limit: "8Gi"
+
+  storage:
+    contentRepo:
+      capacity: "10Gi"
+      storageClass: "gp3"
+    flowfileRepo:
+      capacity: "10Gi"
+      storageClass: "gp3"
+    provenanceRepo:
+      capacity: "10Gi"
+      storageClass: "gp3"
+    databaseRepo:
+      capacity: "1Gi"
+      storageClass: "gp3"
+    stateRepo:
+      capacity: "1Gi"
+      storageClass: "gp3"
+
+  ingress:
+    enabled: true
+    className: alb
+    path: /nifi
+    annotations:
+      alb.ingress.kubernetes.io/scheme: internet-facing
+      alb.ingress.kubernetes.io/target-type: ip
+      alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443}]'
+      alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:eu-south-2:226585359982:certificate/14f8ef52-1741-4986-a9d8-46cbb4052eff
+      alb.ingress.kubernetes.io/backend-protocol: HTTPS
+      alb.ingress.kubernetes.io/healthcheck-protocol: HTTPS
+      alb.ingress.kubernetes.io/healthcheck-path: /nifi
+      alb.ingress.kubernetes.io/healthcheck-port: "8443"
+      alb.ingress.kubernetes.io/ssl-policy: ELBSecurityPolicy-TLS13-1-2-2021-06
+      alb.ingress.kubernetes.io/success-codes: '200-399'
+      alb.ingress.kubernetes.io/target-group-attributes: stickiness.enabled=true,stickiness.lb_cookie.duration_seconds=86400
+    hosts:
+      - host: nifi.tsupreme.com
+        paths:
+          - path: /
+            pathType: Prefix
+
+  ingressRoute:
+    enabled: false
+
+zookeeper:
+  storage:
+    enabled: true
+    size: "1Gi"
+    storageClass: "gp3"
+
+pipelineImporter:
+  gitRepo: "https://github.com/TSIB-Arch/genomics-cicd.git"
+  gitBranch: "main"
+  pipelinesPath: "nifi/sns-o/dev/pipelines/sns-o/dev"
+  pollInterval: "300"
+  gitCredentials:
+    username: ""  # Set via external secret or CI/CD
+    password: ""  # Set via external secret or CI/CD

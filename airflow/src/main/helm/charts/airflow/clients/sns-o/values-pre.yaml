@@ -1,0 +1,102 @@
+# Despliegue en entorno de preproduccion
+enabledReleases:
+  - airflow
+
+environment: pre
+
+dags:
+  gitSync:
+    enabled: true
+    repo: https://github.com/TSIB-Arch/genomics-cicd.git
+    branch: main  # Necesario para sobrescribir valor por defecto
+    rev: HEAD    # Necesario para sobrescribir valor por defecto
+    ref: main    # Para git-sync v4, usar ref en lugar de branch
+    depth: 1
+    maxFailures: -1  # Permitir 3 fallos consecutivos antes de abortar
+    subPath: "airflow/sns-o/pre/dags"  # Ruta relativa dentro del repo
+    period: "300s"  # Para git-sync v4, usar period en lugar de wait
+    # Credenciales
+    credentialsSecret: airflow-git-credentials
+    # Recursos (opcional pero recomendado)
+    resources:
+      limits:
+        cpu: 200m
+        memory: 512Mi
+      requests:
+        cpu: 50m
+        memory: 128Mi
+
+workers:
+  persistence:
+    enabled: true
+    storageClassName: local-path
+    size: 1Gi
+
+triggerer:
+  persistence:
+    enabled: true
+    storageClassName: local-path
+    size: 1Gi
+
+redis:
+  enabled: true
+  persistence:
+    enabled: true
+    storageClassName: local-path
+    size: 1Gi
+
+scheduler:
+  resources:
+    requests:
+      cpu: "250m"
+      memory: "512Mi"
+    limits:
+      cpu: "500m"
+      memory: "1Gi"
+
+ingress:
+  apiServer:
+    enabled: true
+    ingressClassName: traefik
+    path: "/airflow"
+    pathType: "Prefix"
+    hosts:
+      - name: pregenomica-app.admon-cfnavarra.es
+    annotations:
+      traefik.ingress.kubernetes.io/router.entrypoints: web
+
+webserver:
+  enabled: true
+  defaultUser:
+    enabled: true
+    username: genomica
+    password: genomica_2025%
+    email: admin@example.com
+    firstName: admin
+    lastName: user
+    role: Admin
+
+createUserJob:
+  enabled: false
+  useHelmHooks: false
+  applyCustomEnv: false
+
+migrateDatabaseJob:
+  enabled: false
+  useHelmHooks: false
+  applyCustomEnv: false
+
+extraEnv: |
+  - name: AIRFLOW__WEBSERVER__BASE_URL
+    value: "https://pregenomica-app.admon-cfnavarra.es/airflow"
+  - name: AIRFLOW__WEBSERVER__ENABLE_PROXY_FIX
+    value: "True"
+  - name: AIRFLOW__API__BASE_URL
+    value: "https://pregenomica-app.admon-cfnavarra.es/airflow"
+
+config:
+  webserver:
+    base_url: "https://pregenomica-app.admon-cfnavarra.es/airflow"
+    enable_proxy_fix: "True"
+  api:
+    base_url: "https://pregenomica-app.admon-cfnavarra.es/airflow"

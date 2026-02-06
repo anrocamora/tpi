@@ -1,0 +1,12 @@
+name: tpi-agent-service
+description: "TPI Agent Service - Automatic file upload agent to S3 with Kafka event tracking"
+version: 1.0.0
+apiVersion: v1
+appVersion: updated_in_pipeline
+keywords:
+  - tpi-agent-service
+  - file-upload
+  - s3
+  - kafka
+sources: []
+maintainers: []

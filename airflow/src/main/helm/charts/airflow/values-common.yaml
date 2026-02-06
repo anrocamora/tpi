@@ -1,0 +1,7 @@
+# valores compartidos a todos los entornos
+global:
+  # por ejemplo, labels comunes, timeouts, imágenes…
+  pullPolicy: IfNotPresent
+  # para extraer imágenes privadas de Harbor
+#  imagePullSecrets:
+#    - name: mtr-credentials

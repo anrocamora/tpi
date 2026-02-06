@@ -1,0 +1,27 @@
+{
+  "eventType": "FILE_CATALOGED",
+  "eventVersion": 1,
+  "eventId": "agent:MiSeq:tsupreme-agent-001:260127_M05089_0581_000000000-M5TWK:AnalysisError.txt:FILE_CATALOGED",
+  "occurredAt": 1770130485,
+  "uploadId": "e8f4c815-c98a-493b-afef-f93606adc2c8",
+  "sourceName": "MiSeq",
+  "agentId": "tsupreme-agent-001",
+  "runId": "260127_M05089_0581_000000000-M5TWK",
+  "file": {
+    "name": "AnalysisError.txt",
+    "path": "agent/MiSeq/tsupreme-agent-001/260127_M05089_0581_000000000-M5TWK/AnalysisError.txt",
+    "uri": "s3://genomica-s3-eu-south-2/agent/MiSeq/tsupreme-agent-001/260127_M05089_0581_000000000-M5TWK/AnalysisError.txt",
+    "ref": "agent:MiSeq:tsupreme-agent-001:260127_M05089_0581_000000000-M5TWK:AnalysisError.txt"
+  },
+  "catalog": {
+    "status": "CATALOGED",
+    "cataloged": true,
+    "catalogedAt": 1770130485,
+    "by": "nifi",
+    "pipeline": "DAG_TSUPREME_001_TPIAGENT_UPLOADS",
+    "dedupKey": "agent:MiSeq:tsupreme-agent-001:260127_M05089_0581_000000000-M5TWK:AnalysisError.txt:FILE_CATALOGED"
+  },
+  "tags": [
+    "run_260127_M05089_0581_000000000-M5TWK"
+  ]
+}

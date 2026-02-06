@@ -1,0 +1,23 @@
+---
+{{ if and .Values.storage.enabled (eq (.Values.storage.type | default "smb") "smb") .Values.storage.smb.enabled (eq (.Values.storage.smb.provisioning | default "dynamic") "dynamic") }}
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: {{ default (printf "%s-smb" .Release.Name) .Values.storage.smb.storageClassName | quote }}
+provisioner: smb.csi.k8s.io
+{{- with .Values.storage.smb.mountOptions }}
+mountOptions:
+{{ toYaml . | indent 2 }}
+{{- end }}
+reclaimPolicy: {{ .Values.storage.smb.reclaimPolicy | default "Delete" }}
+allowVolumeExpansion: true
+{{- if .Values.storage.smb.volumeBindingMode }}
+volumeBindingMode: {{ .Values.storage.smb.volumeBindingMode | quote }}
+{{- end }}
+parameters:
+  source: {{ required "storage.smb.share es obligatorio cuando storage.enabled=true y storage.smb.enabled=true" .Values.storage.smb.share | replace "\\\\" "//" | replace "\\" "/" | quote }}
+  csi.storage.k8s.io/provisioner-secret-name: {{ required "storage.smb.secretName es obligatorio cuando storage.enabled=true y storage.smb.enabled=true" .Values.storage.smb.secretName | quote }}
+  csi.storage.k8s.io/provisioner-secret-namespace: {{ .Values.metadata.namespace | quote }}
+  csi.storage.k8s.io/node-stage-secret-name: {{ required "storage.smb.secretName es obligatorio cuando storage.enabled=true y storage.smb.enabled=true" .Values.storage.smb.secretName | quote }}
+  csi.storage.k8s.io/node-stage-secret-namespace: {{ .Values.metadata.namespace | quote }}
+{{ end }}

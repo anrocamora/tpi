@@ -1,0 +1,83 @@
+# Valores comunes para desplegar Apache NiFi utilizando el operador de Stackable.
+# Este fichero se puede combinar con los valores de cada entorno usando
+# `helm install ... -f values-common.yaml -f values-<entorno>.yaml`.
+
+global:
+  imageRegistry: mtr.devops.telekom.de/genomica
+  imagePullSecrets:
+    - name: mtr-credentials
+
+# Configuración de MCP (Management Control Plane) - usa imagen de MTR
+mcp:
+  replicas: 1
+  enabled: false  # Deshabilitado por defecto
+  image:
+    repository: mtr.devops.telekom.de/genomica/nifi-mcp
+    tag: "1.0.0"
+    pullPolicy: IfNotPresent
+  config:
+    name: ""  # Si está vacío, se generará automáticamente
+  service:
+    type: ClusterIP
+    port: 3000
+
+# Configuración de NiFi - usa imagen oficial de Stackable
+nifi:
+  namespace: tpi
+  createNamespace: true
+  stackableVersion: "24.11.0"
+  image:
+    repository: nifi
+    tag: "1.27.0"
+    pullPolicy: IfNotPresent
+  service:
+    name: ""
+    port: 8443
+  network:
+    http:
+      port: 8443
+  # Configuración de ingress
+  ingress:
+    enabled: false
+    className: ""
+    annotations: {}
+    hosts: []
+    tls: []
+    path: /
+  # Configuración de IngressRoute (Traefik)
+  ingressRoute:
+    enabled: false  # Deshabilitado por defecto
+    host: ""
+    path: "/nifi"
+  # Configuración de autenticación
+  auth:
+    singleUser:
+      enabled: true
+      createSecret: true
+      username: "admin"
+      password: "genomica_2025%"
+      secretName: "nifi-single-user"
+      authenticationClass: ""  # Si está vacío, se generará automáticamente
+  # Configuración de propiedades sensibles
+  sensitiveProperties:
+    keySecret: ""  # Si está vacío, se generará automáticamente
+    autoGenerate: true
+  # Configuración del cluster
+  cluster:
+    enabled: true
+    replicas: 1
+  replicas: 1
+  # Recursos de CPU y memoria
+  resources:
+    cpu:
+      min: "500m"
+      max: "2000m"
+    memory:
+      # Stackable NiFi Operator espera `memory.limit` (se traduce a límites/requests del Pod)
+      # Mantener `min/max` fuera para evitar que no se apliquen overrides.
+      limit: "4Gi"
+  # Configuración de almacenamiento
+  storage:
+    size: "10Gi"
+    className: "standard"
+

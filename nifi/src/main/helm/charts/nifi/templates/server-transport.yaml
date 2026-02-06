@@ -1,0 +1,10 @@
+{{- $ir := (.Values.nifi.ingressRoute | default dict) -}}
+{{- if (index $ir "enabled") }}
+apiVersion: traefik.io/v1alpha1
+kind: ServersTransport
+metadata:
+  name: {{ include "nifi.fullname" . }}-transport
+  namespace: {{ include "nifi.namespace" . }}
+spec:
+  insecureSkipVerify: true
+{{- end }}

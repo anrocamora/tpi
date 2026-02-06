@@ -1,0 +1,53 @@
+% styles/pandoc-custom.tex
+
+% Spanish strings
+\usepackage[spanish]{babel}
+
+% For the logo
+\usepackage{graphicx}
+\graphicspath{{../styles/}{./styles/}{../}{./}}
+
+% Page count
+\usepackage{lastpage}
+
+% --- Header/footer ---
+% Eisvogel (scrartcl) loads scrlayer-scrpage with its own options.
+% Do NOT load fancyhdr here.
+% Configure scrlayer-scrpage late to avoid vertical-mode issues at \begin{document}.
+\usepackage{atbegshi}
+\AtBeginShipoutFirst{%
+  % Quiet check: if scrlayer-scrpage is loaded, \clearpairofpagestyles is defined.
+  \expandafter\ifx\csname clearpairofpagestyles\endcsname\relax
+    % scrlayer-scrpage not loaded; do nothing.
+  \else
+    \clearpairofpagestyles
+
+    % Header: left (title + date)
+    \ihead{%
+      \begin{minipage}[t]{0.72\textwidth}
+        \textbf{$title$}\\
+        \small Generado el: \today
+      \end{minipage}
+    }%
+
+    % Header: right (logo)
+    \ohead{%
+      \begin{minipage}[t]{0.25\textwidth}
+        \raggedleft
+        \ifdefined\pandoclogo
+          \includegraphics[height=12mm]{\pandoclogo}%
+        \else
+          \includegraphics[height=12mm]{t-systems}%
+        \fi
+      \end{minipage}
+    }%
+
+    % Footer
+    \ifoot{\small Autoría: $author$}%
+    \ofoot{\small Página \thepage\ de \pageref{LastPage}}%
+
+    % Apply to all pages, including plain (TOC/title)
+    \pagestyle{scrheadings}%
+    \DeclarePageStyleAlias{plain}{scrheadings}%
+  \fi
+}

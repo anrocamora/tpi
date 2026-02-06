@@ -1,0 +1,95 @@
+# Despliegue en entorno de DEV para cliente SNS-O
+enabledReleases:
+  - tpi-agent-service
+
+# Entorno DEV
+environment: dev
+
+# Configuración de Spring
+spring:
+  profiles:
+    name: dev
+
+# Configuración de la imagen Docker
+image:
+  repository: "mtr.devops.telekom.de/genomica/tpi-agent-service"
+  tag: "2026.03.01"
+
+# Configuración del agente TPI
+agent:
+  id: tsupreme-agent-001
+  client: snso
+  env: dev
+  # Montamos la raíz del share en /data
+  # La aplicación detectará automáticamente los sources (subcarpetas de primer nivel)
+  # y creará la estructura /data/{sourceName}/{agentId}/{source,completed,failed,logs}
+  baseDir: /data
+  upload:
+    # Subidas paralelas: 10 threads para PRE (óptimo)
+    # Mejora el rendimiento de 5h a ~45min con balance recursos/velocidad
+    concurrentUploads: 10
+
+# Configuración de Kafka con SSL
+kafka:
+  bootstrapServers: kafka-tls-kafka-bootstrap:9093
+  ssl:
+    enabled: true
+    secretName: kafka-tls-secret
+    keystorePassword: ''  # Set via external secret
+    truststorePassword: ''  # Set via external secret
+    keyPassword: ''  # Set via external secret
+
+# Configuración de almacenamiento (DEV usa NFS)
+storage:
+  enabled: true
+  type: local
+  smb:
+    enabled: false
+
+  nfs:
+    enabled: false
+    server: ""
+    path: ""
+    # Opcional: si quieres un PVC determinista, descomenta y ajusta
+    # pvcName: "tpi-agent-service-snso-001-dev-nfs-pvc"
+
+  local:
+    enabled: true
+
+# Configuración de AWS S3 para DEV
+# IMPORTANTE: Configurar credenciales via External Secrets o variables de entorno
+aws:
+  accessKeyId: ''  # Set via external secret
+  secretAccessKey: ''  # Set via external secret
+  region: eu-south-2
+  s3:
+    bucket: genomica-s3-eu-south-2
+    endpoint: https://s3.eu-south-2.amazonaws.com
+    basePath: agent/
+    pathStyleAccess: false
+
+# Configuración del initContainer
+initContainer:
+  image: mtr.devops.telekom.de/genomica/busybox:1.32.0
+
+# Configuración de la aplicación
+application:
+  name: tpi-agent-service
+  replicas: 1
+
+# Recursos del contenedor
+# Optimizado para subida paralela (5 threads en DEV)
+# Ver features/PARALLEL-UPLOAD-RESOURCES.md para detalles
+resources:
+  limits:
+    memory: 6Gi      # Aumentado de 1.5Gi para soportar 10 threads paralelos
+    cpu: 3000m       # Aumentado de 0.5 para throughput óptimo
+  requests:
+    memory: 3Gi      # Base para operación estable con 10 threads
+    cpu: 1500m       # Mínimo para 10 threads
+
+# Configuración del servicio
+service:
+  name: tpi-agent-service
+  type: ClusterIP
+  port: 8080

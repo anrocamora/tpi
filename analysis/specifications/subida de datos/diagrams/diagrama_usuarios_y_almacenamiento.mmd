@@ -1,0 +1,42 @@
+%% Diagrama resumen: usuarios, unidades de red y almacenamiento
+flowchart TB
+
+  subgraph UserActor[Actores: usuarios]
+    direction LR
+    CopyUser(["👤 Usuario del servicio de genética encargado de la copia manual de ficheros de dato crudo/bruto del run"])
+    RequestUser(["👤 Usuario del servicio de genética encargado de la creación manual de peticiones en TPI Request"])
+    GeneticUser(["👤 Usuario del servicio de genética"])
+  end
+
+  subgraph ComponentActors[Actores: componentes]
+    direction LR
+    Agent["TPI Agent: agente o daemon de subida de datos"]
+    TpiRequest["TPI Request: aplicación web de gestión de peticiones"]
+  end
+
+  subgraph Almacenamiento
+    direction TB
+    SeqDataStorage[["Unidad para subida de datos a la plataforma (datos de secuenciadores y resultados de Nasertic) (Pre en <code>\\\\Dc1gpronas007\\MISEQ_PRE</code>) </br>Estructura: </br><code>{{source_id}}/ {{run_id}}/ {{rawdata-files.fastq.gz}}"]]
+
+    subgraph THealthLake["THealthLake S3"]
+        direction TB
+        Landing[["Carpeta <b>agent</b> (landing zone) </br>Estructura </br><code>agent / {{source_id}} / {{agent_id}} / {{run_id}} / {{rawdata-files.fastq.gz}}</code>"]]
+        FinalStorage[["Carpeta <b>data</b> (datos crudos y resultados) </br>Estructura </br>· Datos crudos: <code>data / sample / {{sample_id}} / rawdata</code> </br>· Resultados: <code>data / sample / {{sample_id}} / results</code>"]]
+    end
+
+    GeneticStorageMount[["Unidad para trabajo del servicio de genética"]]
+  end
+
+  %% === Flujo principal ===
+  CopyUser -->|"Copia manual de runs (genera archivo COMPLETED)"| SeqDataStorage
+  SeqDataStorage -->|"Run completo (fichero COMPLETED)"| Agent
+  Agent -->|"Transferencia a landing zone"| Landing
+  Landing --> TpiRequest
+  TpiRequest -->|"Movimiento a ubicación definitiva"| FinalStorage
+
+  %% Operativa del usuario de peticiones
+  RequestUser -->|"Creación de petición y asociación de ficheros de dato bruto a la muestra"| TpiRequest
+
+  %% Acceso del servicio de genética a resultados
+  GeneticUser -->|"Acceso a datos de muestras"| GeneticStorageMount
+  GeneticStorageMount ---|"Montaje como unidad de red"| THealthLake

@@ -1,0 +1,73 @@
+sequenceDiagram
+    participant Seq as Secuenciador
+    participant User as Usuario
+    participant Share as Unidad Red
+    participant Agent as TPI Agent
+    participant S3 as THealthLake S3
+    participant Kafka as Kafka
+    participant Airflow as Airflow DAG
+    participant NiFi as NiFi Pipeline
+    participant Tomic as Tomic API
+
+    Note over Seq,Tomic: UC-DS-001: SUBIDA DE DATOS
+
+    Seq->>Share: Genera run + RunCompletionStatus.xml
+    User->>Share: (Opcional) Copia manual
+
+    loop Escaneo cada 30s
+        Agent->>Share: Escanea directorios
+    end
+
+    Agent->>Share: Detecta run completo
+    Agent->>Share: Mueve a source/
+    Agent->>Kafka: UPLOAD_STARTED (con Folder completo ~10MB)
+
+    par Subida paralela (10 hilos)
+        Agent->>S3: Upload fichero 1
+        Agent->>S3: Upload fichero 2
+        Agent->>S3: Upload fichero N
+    end
+
+    loop Por cada fichero completado
+        Agent->>Kafka: UPLOAD_PROGRESS (ligero ~500 bytes)
+    end
+
+    Agent->>Share: Mueve a completed/
+    Agent->>Kafka: UPLOAD_COMPLETED (con Folder completo ~10MB)
+
+    Note over Seq,Tomic: UC-DS-002: CATALOGACIÓN
+
+    Note over Airflow: DAG arrancó NiFi previamente
+
+    NiFi->>Kafka: Consume UPLOAD_COMPLETED
+    NiFi->>NiFi: Parsea Folder recursivo
+    NiFi->>NiFi: Construye DIR_TASK + FILE_TASK
+    NiFi->>NiFi: Ordena directorios padre→hijo
+
+    NiFi->>Tomic: Login (POST /users/login)
+    Tomic-->>NiFi: JWT token
+    NiFi->>NiFi: Cachear token + exp
+
+    loop Secuencial, ordenado por profundidad
+        NiFi->>Tomic: POST /files/create (DIRECTORY)
+        Tomic-->>NiFi: 200 OK / 409 Conflict (tratado como éxito)
+        NiFi->>NiFi: Notify: dirs_created +1
+    end
+
+    Note over NiFi: Wait/Notify: Todos dirs creados (gate)
+
+    par Linkado paralelo de ficheros
+        NiFi->>Tomic: POST /files/link (fichero 1)
+        NiFi->>Tomic: POST /files/link (fichero 2)
+        NiFi->>Tomic: POST /files/link (fichero N)
+    end
+
+    par Update tags paralelo
+        NiFi->>Tomic: POST /files/update?tagsAction=ADD (tags fichero 1)
+        NiFi->>Tomic: POST /files/update?tagsAction=ADD (tags fichero 2)
+        NiFi->>Tomic: POST /files/update?tagsAction=ADD (tags fichero N)
+    end
+
+    Note over User,Tomic: ✅ Datos disponibles para búsqueda/análisis
+    User->>Tomic: Buscar por tag: run_* o sample_*
+    Tomic-->>User: Listado de ficheros catalogados

@@ -1,0 +1,134 @@
+workflow:
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE =~ /See merge request/i'
+      when: always
+    - when: never
+
+stages:
+  - params
+  - gate
+  - push-chart
+
+variables:
+  HELMFILEDIR: src/main/helm/charts/airflow
+  HELM_EXPERIMENTAL_OCI: 1
+  HARBOR_CHART: 'https://harbor.apps.ocpdes.t-systems.es/api/chartrepo/genomica/charts'
+  PROJECT_NAME: 'airflow'
+  NAMESPACE: 'tpi'
+
+select_params:
+  stage: params
+  when: manual
+  allow_failure: false
+  variables:
+    CLIENT: ""
+    ENV: ""
+  script: |
+    echo "Validando parámetros…"
+    : "${CLIENT:?Defina CLIENT (sns-o|hsc|otro) en el formulario del job}"
+    : "${ENV:?Defina ENV (dev|pre|pro) en el formulario del job}"
+
+    case "$CLIENT" in sns-o|hsc|otro) ;; *) echo "CLIENT inválido: $CLIENT"; exit 1;; esac
+    case "$ENV" in dev|pre|pro) ;; *) echo "ENV inválido: $ENV"; exit 1;; esac
+
+    {
+      echo "CLIENT_SELECTED=$CLIENT"
+      echo "ENV_SELECTED=$ENV"
+      echo "CONFIRMED=1"
+    } > params.env
+  artifacts:
+    reports:
+      dotenv: params.env
+
+must_select:
+  stage: gate
+  allow_failure: false
+  dependencies: ["select_params"]   # carga params.env
+  script: |
+    : "${CONFIRMED:?Falta ejecutar el job manual 'select_params'}"
+    : "${CLIENT_SELECTED:?Falta CLIENT_SELECTED}"
+    : "${ENV_SELECTED:?Falta ENV_SELECTED}"
+
+    # Promociona a nombres canónicos para el resto de jobs
+    {
+      echo "CLIENT=$CLIENT_SELECTED"
+      echo "ENV=$ENV_SELECTED"
+    } > confirmed.env
+
+    echo "Parámetros confirmados: CLIENT=$CLIENT_SELECTED, ENV=$ENV_SELECTED"
+  artifacts:
+    reports:
+      dotenv: confirmed.env
+
+push_chart:
+  stage: push-chart
+  image:
+    name: harbor.apps.ocpdes.t-systems.es/devops/aws-kubectl-helm:1.0.0
+    entrypoint: [""]
+  script:
+    - helm registry login "${HARBOR_URL}" -u "${HARBOR_USERNAME}" -p "${HARBOR_PASSWORD}"
+    - cd $HELMFILEDIR
+    - helm dependency update
+    - helm package .
+    - ls -l
+    - FILE=$(ls ${PROJECT_NAME}-*.tgz)
+    - curl -u "${HARBOR_USERNAME}:${HARBOR_PASSWORD}" -X POST "${HARBOR_CHART}" -F chart=@${FILE}
+  dependencies:
+    - must_select
+
+sync_helm_to_cicd:
+  stage: push-chart
+  needs:
+    - job: push_chart
+    - job: must_select
+      artifacts: true
+  image:
+    name: harbor.apps.ocpdes.t-systems.es/devops/alpine/git
+    entrypoint: [""]
+  script: |
+    set -euo pipefail
+    
+    git config --global user.name  "${GIT_USER}"
+    git config --global user.email "${GIT_COMMIT_EMAIL:-genomica_pipe@t-systems.com}"
+
+    CICD_TARGET_PATH="${PROJECT_NAME}/${CLIENT}/${ENV}"
+    [ -d "$HELMFILEDIR" ] || { echo "No existe HELMFILEDIR=$HELMFILEDIR"; exit 1; }
+
+    # Construir AUTH_URL igual que en local con PAT (usuario oauth2)
+    CICD_REPO_URL="http://setools.t-systems.es/gitlab/health/genomica/commons/cicd.git"
+    PROTO="${CICD_REPO_URL%%://*}"        
+    REST="${CICD_REPO_URL#*://}"           
+    AUTH_URL="${PROTO}://oauth2:${GIT_TOKEN}@${REST}"
+
+    # Clonar main (si no existe, bootstrap de main)
+    git clone --depth 1 --branch main "$AUTH_URL" cicd || {
+      git clone --depth 1 "$AUTH_URL" cicd
+      cd cicd && git checkout -b main && cd -
+    }
+
+    # Sincronizar árbol
+    mkdir -p "cicd/${CICD_TARGET_PATH}"
+    rm -rf "cicd/${CICD_TARGET_PATH:?}/"* 2>/dev/null || true
+    cp -a "${HELMFILEDIR}/." "cicd/${CICD_TARGET_PATH}/"
+
+    # Generar appset.yaml específico para el entorno
+    cat > "cicd/${CICD_TARGET_PATH}/appset.yaml" << EOF
+      name: "${PROJECT_NAME}"
+      namespace: "${NAMESPACE}"
+      releaseName: "${PROJECT_NAME}"
+      chartPath: "${PROJECT_NAME}/${CLIENT}/${ENV}"
+    EOF
+    echo "Generado appset.yaml con chartPath: ${PROJECT_NAME}/${CLIENT}/${ENV}"
+    
+    # Commit solo si hay cambios y push
+    cd cicd
+    git add -A
+    if git diff --cached --quiet; then
+      echo "Sin cambios en ${CICD_TARGET_PATH}"
+      exit 0
+    fi
+    git commit -m "sync(helm): ${PROJECT_NAME}/${CLIENT}/${ENV} desde ${CI_PROJECT_PATH}@${CI_COMMIT_SHORT_SHA}"
+    git push "$AUTH_URL" HEAD:main
+  only:
+    refs: [ "main" ]
+  allow_failure: false

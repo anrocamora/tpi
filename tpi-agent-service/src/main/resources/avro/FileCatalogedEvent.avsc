@@ -1,0 +1,102 @@
+{
+  "type": "record",
+  "name": "FileCatalogedEvent",
+  "namespace": "com.tpi.catalog.events.v1",
+  "doc": "Event emitted when a specific file has been cataloged.",
+  "fields": [
+    {
+      "name": "eventType",
+      "type": {
+        "type": "enum",
+        "name": "EventType",
+        "symbols": ["FILE_CATALOGED"]
+      },
+      "default": "FILE_CATALOGED",
+      "doc": "Type of the event."
+    },
+    {
+      "name": "eventVersion",
+      "type": "int",
+      "default": 1,
+      "doc": "Schema version of the event payload."
+    },
+    {
+      "name": "eventId",
+      "type": "string",
+      "doc": "Event identifier. Can be deterministic (dedupKey) or UUID."
+    },
+    {
+      "name": "occurredAt",
+      "type": { "type": "long", "logicalType": "timestamp-millis" },
+      "doc": "Event timestamp in epoch millis."
+    },
+
+    { "name": "uploadId", "type": "string" },
+    { "name": "sourceName", "type": "string" },
+    { "name": "agentId", "type": "string" },
+    { "name": "runId", "type": ["null", "string"], "default": null },
+
+    {
+      "name": "file",
+      "type": {
+        "type": "record",
+        "name": "FileRef",
+        "fields": [
+          { "name": "name", "type": "string" },
+          { "name": "path", "type": "string" },
+          { "name": "uri", "type": ["null", "string"], "default": null },
+          { "name": "ref", "type": "string" }
+        ]
+      }
+    },
+
+    {
+      "name": "catalog",
+      "type": {
+        "type": "record",
+        "name": "CatalogInfo",
+        "fields": [
+          {
+            "name": "status",
+            "type": {
+              "type": "enum",
+              "name": "CatalogStatus",
+              "symbols": ["CATALOGED"]
+            },
+            "default": "CATALOGED"
+          },
+          { "name": "cataloged", "type": "boolean", "default": true },
+          {
+            "name": "catalogedAt",
+            "type": { "type": "long", "logicalType": "timestamp-millis" },
+            "doc": "Catalog timestamp in epoch millis."
+          },
+          {
+            "name": "by",
+            "type": "string",
+            "default": "nifi",
+            "doc": "Producer identifier (e.g., nifi)."
+          },
+          {
+            "name": "pipeline",
+            "type": ["null", "string"],
+            "default": null
+          },
+          {
+            "name": "dedupKey",
+            "type": ["null", "string"],
+            "default": null,
+            "doc": "Stable key to deduplicate events across retries."
+          }
+        ]
+      }
+    },
+
+    {
+      "name": "tags",
+      "type": { "type": "array", "items": "string" },
+      "default": [],
+      "doc": "Optional tags associated with the file."
+    }
+  ]
+}

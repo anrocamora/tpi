@@ -1,0 +1,38 @@
+{
+  "type": "record",
+  "name": "Folder",
+  "namespace": "es.tsystems.genomics.tpiagent.upload.model",
+  "doc": "Model to catalog folders (runs) and their contents.",
+  "fields": [
+    { "name": "name", "type": ["null", "string"], "default": null },
+    { "name": "url", "type": ["null", "string"], "default": null },
+    {
+      "name": "source",
+      "type": ["null", { "type": "record", "name": "Source", "fields": [
+        { "name": "name", "type": ["null", "string"], "default": null },
+        { "name": "description", "type": ["null", "string"], "default": null }
+      ] }],
+      "default": null
+    },
+    {
+      "name": "files",
+      "type": {
+        "type": "array",
+        "items": {
+          "type": "record",
+          "name": "FileRef",
+          "fields": [
+            { "name": "name", "type": ["null", "string"], "default": null },
+            { "name": "url", "type": ["null", "string"], "default": null }
+          ]
+        }
+      },
+      "default": []
+    },
+    {
+      "name": "folders",
+      "type": { "type": "array", "items": "Folder" },
+      "default": []
+    }
+  ]
+}

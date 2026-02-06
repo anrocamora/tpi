@@ -1,0 +1,35 @@
+stateDiagram-v2
+    [*] --> DETECTED: Run con RunCompletionStatus.xml
+
+    DETECTED --> STARTED: Movido a source/<br/>Publicado UPLOAD_STARTED
+
+    STARTED --> IN_PROGRESS: Subiendo ficheros<br/>Eventos UPLOAD_PROGRESS
+
+    IN_PROGRESS --> COMPLETED: Todos ficheros OK<br/>Publicado UPLOAD_COMPLETED
+    IN_PROGRESS --> FAILED: Error irrecuperable<br/>Publicado UPLOAD_FAILED
+    IN_PROGRESS --> ABORTED: Fichero eliminado<br/>Cleanup S3
+    IN_PROGRESS --> ABANDONED: > 24h sin completar
+
+    COMPLETED --> [*]: Movido a completed/
+    FAILED --> [*]: Movido a failed/
+    ABORTED --> [*]: Upload abortado en S3
+    ABANDONED --> [*]: Marcado como abandonado
+
+    note right of IN_PROGRESS
+        Reanudable tras reinicio
+        si < 24h y fichero existe
+
+        Estado persistido en
+        topic Kafka compactado
+    end note
+
+    note right of COMPLETED
+        Trigger para UC-DS-002
+        Evento UPLOAD_COMPLETED
+        incluye Folder completo
+    end note
+
+    note right of FAILED
+        Requiere análisis manual
+        Ver logs en failed/
+    end note

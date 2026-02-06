@@ -1,0 +1,120 @@
+{
+  "type": "record",
+  "name": "UploadEvent",
+  "namespace": "es.tsystems.genomics.tpiagent.upload.service",
+  "doc": "Event published to Kafka to report the progress/status of an upload.",
+  "fields": [
+    {
+      "name": "eventType",
+      "type": "string"
+    },
+    { "name": "uploadId", "type": "string" },
+    { "name": "agentId", "type": "string" },
+    { "name": "sourceName", "type": "string" },
+    {
+      "name": "runId",
+      "type": ["null", "string"],
+      "default": null,
+      "doc": "Run/folder identifier (name of the top-level folder)."
+    },
+    {
+      "name": "itemRelativePath",
+      "type": ["null", "string"],
+      "default": null,
+      "doc": "File relative path within the run (when the event is item-level)."
+    },
+
+    { "name": "filePath", "type": ["null", "string"], "default": null },
+    {
+      "name": "sizeBytes",
+      "type": "long",
+      "default": 0
+    },
+
+    {
+      "name": "bytesTotal",
+      "type": ["null", "long"],
+      "default": null,
+      "doc": "Total bytes of the run (sum of files, excluding RunCompletionStatus.xml)."
+    },
+    {
+      "name": "bytesUploaded",
+      "type": ["null", "long"],
+      "default": null,
+      "doc": "Accumulated uploaded bytes (run-level)."
+    },
+
+    { "name": "storageBackend", "type": ["null", "string"], "default": null },
+    { "name": "s3Bucket", "type": ["null", "string"], "default": null },
+    { "name": "s3Key", "type": ["null", "string"], "default": null },
+    { "name": "s3UploadId", "type": ["null", "string"], "default": null },
+
+    {
+      "name": "occurredAt",
+      "type": [
+        "null",
+        "double"
+      ],
+      "default": null
+    },
+
+    { "name": "errorCode", "type": ["null", "string"], "default": null },
+    { "name": "errorMessage", "type": ["null", "string"], "default": null },
+
+    { "name": "partNumber", "type": ["null", "int"], "default": null },
+    { "name": "partEtag", "type": ["null", "string"], "default": null },
+
+    { "name": "partsCompleted", "type": ["null", "int"], "default": null },
+    { "name": "partsTotal", "type": ["null", "int"], "default": null },
+
+    { "name": "progressPercentage", "type": ["null", "double"], "default": null },
+
+    {
+      "name": "metadata",
+      "type": ["null", { "type": "map", "values": "string" }],
+      "default": null
+    },
+    {
+      "name": "folder",
+      "type": ["null", {
+        "type": "record",
+        "name": "Folder",
+        "namespace": "es.tsystems.genomics.tpiagent.upload.model",
+        "doc": "Model to catalog folders (runs) and their contents.",
+        "fields": [
+          { "name": "name", "type": ["null", "string"], "default": null },
+          { "name": "url", "type": ["null", "string"], "default": null },
+          {
+            "name": "source",
+            "type": ["null", { "type": "record", "name": "Source", "fields": [
+              { "name": "name", "type": ["null", "string"], "default": null },
+              { "name": "description", "type": ["null", "string"], "default": null }
+            ] }],
+            "default": null
+          },
+          {
+            "name": "files",
+            "type": {
+              "type": "array",
+              "items": {
+                "type": "record",
+                "name": "FileRef",
+                "fields": [
+                  { "name": "name", "type": ["null", "string"], "default": null },
+                  { "name": "url", "type": ["null", "string"], "default": null }
+                ]
+              }
+            },
+            "default": []
+          },
+          {
+            "name": "folders",
+            "type": { "type": "array", "items": "Folder" },
+            "default": []
+          }
+        ]
+      }],
+      "default": null
+    }
+  ]
+}

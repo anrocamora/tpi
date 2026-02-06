@@ -1,0 +1,228 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "nifi.fullname" . }}-pipeline-import
+  namespace: {{ include "nifi.namespace" . }}
+  labels:
+    {{- include "nifi.labels" . | nindent 4 }}
+data:
+  import-pipelines.sh: |
+    #!/bin/bash
+    set -e
+    
+    echo "=============================================="
+    echo "NiFi Pipeline Importer (Direct Upload)"
+    echo "=============================================="
+    
+    NIFI_URL="https://{{ include "nifi.fullname" . }}-node-default-0.{{ include "nifi.fullname" . }}-node-default.{{ include "nifi.namespace" . }}.svc.cluster.local:8443"
+
+    # Normaliza nombres para comparación: trim + minúsculas
+    normalize_name() {
+      # 1) trim
+      # 2) tolower
+      # Nota: mantenemos compatibilidad con busybox/alpine
+      echo "$1" | sed -e 's/^[[:space:]]*//; s/[[:space:]]*$//' | tr '[:upper:]' '[:lower:]'
+    }
+    
+    # Esperar a que NiFi esté completamente disponible
+    echo "Esperando a que NiFi esté disponible..."
+    MAX_WAIT=300
+    ELAPSED=0
+    until curl -k -s -f -o /dev/null "$NIFI_URL/nifi-api/access/config" 2>/dev/null; do
+      if [ $ELAPSED -ge $MAX_WAIT ]; then
+        echo "ERROR: Timeout esperando a que NiFi esté disponible"
+        exit 1
+      fi
+      echo "  Esperando... ($ELAPSED/$MAX_WAIT segundos)"
+      sleep 10
+      ELAPSED=$((ELAPSED + 10))
+    done
+    echo "NiFi está disponible."
+    
+    # Autenticación
+    echo ""
+    echo "Obteniendo token de autenticación..."
+    TOKEN=$(curl -k -s -X POST "$NIFI_URL/nifi-api/access/token" \
+      -H "Content-Type: application/x-www-form-urlencoded" \
+      -d "username={{ .Values.nifi.auth.singleUser.username }}&password={{ .Values.nifi.auth.singleUser.password | urlquery }}" 2>/dev/null || echo "")
+    
+    if [ -z "$TOKEN" ]; then
+      echo "ERROR: No se pudo obtener el token de autenticación"
+      exit 1
+    fi
+    echo "Token obtenido exitosamente."
+    
+    # Obtener ID del Process Group raíz
+    echo ""
+    echo "Obteniendo ID del Process Group raíz..."
+    ROOT_RESPONSE=$(curl -k -s -H "Authorization: Bearer $TOKEN" "$NIFI_URL/nifi-api/flow/process-groups/root")
+    ROOT_PG_ID=$(echo "$ROOT_RESPONSE" | jq -r '.processGroupFlow.id')
+    
+    if [ -z "$ROOT_PG_ID" ] || [ "$ROOT_PG_ID" = "null" ]; then
+      echo "ERROR: No se pudo obtener el ID del Process Group raíz"
+      echo "Respuesta: $ROOT_RESPONSE"
+      exit 1
+    fi
+    echo "Root Process Group ID: $ROOT_PG_ID"
+    
+    # ============================================
+    # PASO 1: DETECTAR PIPELINES EXISTENTES (ROOT)
+    # ============================================
+    echo ""
+    echo "=============================================="
+    echo "PASO 1: Detectando pipelines existentes (root)"
+    echo "=============================================="
+    
+    ROOT_FLOW=$(curl -k -s -H "Authorization: Bearer $TOKEN" \
+      "$NIFI_URL/nifi-api/flow/process-groups/$ROOT_PG_ID")
+
+    # Guardamos cada nombre normalizado en una cadena con separadores para hacer matching seguro
+    # Formato: |name1|name2|...
+    EXISTING_PG_NAMES="|"
+    EXISTING_PG_NAMES_RAW=$(echo "$ROOT_FLOW" | jq -r '.processGroupFlow.flow.processGroups[]?.component.name // empty' 2>/dev/null)
+    if [ -z "$EXISTING_PG_NAMES_RAW" ]; then
+      echo "No se encontraron Process Groups existentes en el root."
+    else
+      COUNT=0
+      while IFS= read -r pgname; do
+        [ -z "$pgname" ] && continue
+        NORM=$(normalize_name "$pgname")
+        # Evitar duplicados en el set
+        if [[ "$EXISTING_PG_NAMES" != *"|$NORM|"* ]]; then
+          EXISTING_PG_NAMES+="$NORM|"
+          COUNT=$((COUNT + 1))
+        fi
+      done <<< "$EXISTING_PG_NAMES_RAW"
+      echo "Detectados $COUNT Process Groups existentes en el root."
+    fi
+    
+    # ============================================
+    # PASO 2: IMPORTAR NUEVAS PIPELINES (SI NO EXISTEN)
+    # ============================================
+    echo ""
+    echo "=============================================="
+    echo "PASO 2: Importando nuevas pipelines (solo si no existen)"
+    echo "=============================================="
+    
+    # Contar pipelines
+    PIPELINE_COUNT=$(ls -1 /pipelines/*.json 2>/dev/null | wc -l)
+    echo ""
+    echo "Encontradas $PIPELINE_COUNT pipeline(s) para evaluar"
+    
+    IMPORTED=0
+    SKIPPED=0
+    FAILED=0
+    POSITION_Y=100
+    
+    for pipeline_file in /pipelines/*.json; do
+      if [ ! -f "$pipeline_file" ]; then
+        continue
+      fi
+    
+      pipeline_name=$(basename "$pipeline_file" .json)
+      echo ""
+      echo "=============================================="
+      echo "Evaluando: $pipeline_name"
+      echo "=============================================="
+    
+      # Obtener nombre del flow desde el JSON
+      FLOW_NAME=$(jq -r '.flowContents.name // .name // empty' "$pipeline_file")
+      if [ -z "$FLOW_NAME" ] || [ "$FLOW_NAME" = "null" ]; then
+        FLOW_NAME="$pipeline_name"
+      fi
+      FLOW_NAME_NORM=$(normalize_name "$FLOW_NAME")
+      echo "Nombre del Process Group: $FLOW_NAME"
+
+      # Si ya existe (root) por nombre, no importamos.
+      if [[ "$EXISTING_PG_NAMES" == *"|$FLOW_NAME_NORM|"* ]]; then
+        echo "- Omitido: ya existe un Process Group en root con nombre '$FLOW_NAME' (comparación trim+case-insensitive)"
+        SKIPPED=$((SKIPPED + 1))
+        continue
+      fi
+    
+      # Importar el Process Group usando el endpoint /upload (multipart/form-data)
+      echo "Importando Process Group via upload..."
+    
+      IMPORT_RESPONSE=$(curl -k -s -w "\n%{http_code}" -X POST \
+        "$NIFI_URL/nifi-api/process-groups/$ROOT_PG_ID/process-groups/upload" \
+        -H "Authorization: Bearer $TOKEN" \
+        -F "groupName=$FLOW_NAME" \
+        -F "positionX=100" \
+        -F "positionY=$POSITION_Y" \
+        -F "clientId=$(cat /proc/sys/kernel/random/uuid)" \
+        -F "disconnectedNodeAcknowledged=false" \
+        -F "file=@$pipeline_file;type=application/json")
+    
+      IMPORT_BODY=$(echo "$IMPORT_RESPONSE" | sed '$d')
+      IMPORT_STATUS=$(echo "$IMPORT_RESPONSE" | tail -1)
+    
+      if [ "$IMPORT_STATUS" -ge 200 ] && [ "$IMPORT_STATUS" -lt 300 ]; then
+        NEW_PG_ID=$(echo "$IMPORT_BODY" | jq -r '.id')
+        echo "✓ Process Group importado exitosamente (ID: $NEW_PG_ID)"
+
+        # Añadir al set para no reimportar en la misma ejecución
+        EXISTING_PG_NAMES+="$FLOW_NAME_NORM|"
+    
+        # Habilitar Controller Services en orden de dependencias
+        echo "Habilitando Controller Services..."
+    
+        # Intentar habilitar varias veces para resolver dependencias
+        for attempt in 1 2 3; do
+          CS_LIST=$(curl -k -s -H "Authorization: Bearer $TOKEN" \
+            "$NIFI_URL/nifi-api/flow/process-groups/$NEW_PG_ID/controller-services")
+    
+          CS_IDS=$(echo "$CS_LIST" | jq -r '.controllerServices[]? | select(.component.state != "ENABLED") | .id' 2>/dev/null)
+    
+          if [ -z "$CS_IDS" ]; then
+            break
+          fi
+    
+          for CS_ID in $CS_IDS; do
+            CS_INFO=$(curl -k -s -H "Authorization: Bearer $TOKEN" \
+              "$NIFI_URL/nifi-api/controller-services/$CS_ID")
+            CS_VERSION=$(echo "$CS_INFO" | jq -r '.revision.version')
+            CS_NAME=$(echo "$CS_INFO" | jq -r '.component.name')
+            CS_STATE=$(echo "$CS_INFO" | jq -r '.component.state')
+    
+            if [ "$CS_STATE" != "ENABLED" ]; then
+              ENABLE_RESULT=$(curl -k -s -w "\n%{http_code}" -X PUT \
+                "$NIFI_URL/nifi-api/controller-services/$CS_ID/run-status" \
+                -H "Authorization: Bearer $TOKEN" \
+                -H "Content-Type: application/json" \
+                -d "{\"revision\":{\"version\":$CS_VERSION},\"state\":\"ENABLED\"}")
+    
+              ENABLE_STATUS=$(echo "$ENABLE_RESULT" | tail -1)
+              if [ "$ENABLE_STATUS" -ge 200 ] && [ "$ENABLE_STATUS" -lt 300 ]; then
+                echo "  ✓ Habilitado: $CS_NAME"
+              else
+                echo "  - Pendiente: $CS_NAME (intento $attempt)"
+              fi
+            fi
+          done
+    
+          sleep 2
+        done
+    
+        IMPORTED=$((IMPORTED + 1))
+        POSITION_Y=$((POSITION_Y + 200))
+      else
+        echo "✗ Error al importar (HTTP $IMPORT_STATUS)"
+        echo "Respuesta: $IMPORT_BODY"
+        FAILED=$((FAILED + 1))
+      fi
+    done
+    
+    echo ""
+    echo "=============================================="
+    echo "Importación completada"
+    echo "  Importadas: $IMPORTED"
+    echo "  Omitidas (ya existían): $SKIPPED"
+    echo "  Fallidas: $FAILED"
+    echo "=============================================="
+    
+    if [ $FAILED -gt 0 ]; then
+      echo "WARN: Algunas pipelines no se pudieron importar"
+    fi
+    
+    exit 0
+

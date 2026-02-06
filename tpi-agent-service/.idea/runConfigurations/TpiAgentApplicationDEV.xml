@@ -1,0 +1,54 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="TpiAgentApplicationDEV" type="Application" factoryName="Application">
+    <envs>
+      <env name="AGENT_CLIENT" value="snso" />
+      <env name="AGENT_ENV" value="dev" />
+      <env name="AGENT_EVENTS_TOPIC" value="tpi.uploads.tsupreme-agent-001.events.v1" />
+      <env name="AGENT_ID" value="tsupreme-agent-001" />
+      <env name="AGENT_INBOX_DIR" value="C:\tsupreme-agent-001\data" />
+      <env name="AGENT_MAX_RETRIES" value="3" />
+      <env name="AGENT_MAX_RETRY_BACKOFF_MS" value="30000" />
+      <env name="AGENT_MOVE_DIRECTORY_DATASETS" value="true" />
+      <env name="AGENT_PART_SIZE_MB" value="64" />
+      <env name="AGENT_RESUMPTION_MAX_AGE_HOURS" value="24" />
+      <env name="AGENT_RETRY_BACKOFF_MS" value="1000" />
+      <env name="AGENT_SCAN_INTERVAL_MS" value="30000" />
+      <env name="AGENT_STATE_TOPIC" value="tpi.uploads.tsupreme-agent-001.state.v1" />
+      <env name="AGENT_STORAGE_BACKEND" value="DEFAULT" />
+      <env name="AGENT_UPLOAD_CONCURRENT_UPLOADS" value="10" />
+      <env name="AWS_ACCESS_KEY_ID" value="" />
+      <env name="AWS_API_CALL_TIMEOUT_SECONDS" value="1800" />
+      <env name="AWS_CONNECTION_TIMEOUT_SECONDS" value="60" />
+      <env name="AWS_PATH_STYLE_ACCESS" value="false" />
+      <env name="AWS_READ_TIMEOUT_SECONDS" value="1800" />
+      <env name="AWS_REGION" value="eu-south-2" />
+      <env name="AWS_S3_BASE_PATH" value="agent/" />
+      <env name="AWS_S3_BUCKET" value="genomica-s3-eu-south-2" />
+      <env name="AWS_S3_ENDPOINT" value="https://s3.eu-south-2.amazonaws.com" />
+      <env name="AWS_SECRET_ACCESS_KEY" value="" />
+      <env name="AWS_USE_SINGLE_PART_UPLOAD" value="false" />
+      <env name="KAFKA_BOOTSTRAP_SERVERS" value="localhost:9094" />
+      <env name="KAFKA_MAX_REQUEST_SIZE" value="20971520" />
+      <env name="KAFKA_BUFFER_MEMORY" value="104857600" />
+      <env name="KAFKA_MAX_PARTITION_FETCH_BYTES" value="20971520" />
+      <env name="KAFKA_FETCH_MAX_BYTES" value="52428800" />
+      <env name="KAFKA_SECURITY_PROTOCOL" value="SSL" />
+      <env name="KAFKA_SSL_TRUSTSTORE_LOCATION" value="C:\Users\A56691985\IdeaProjects\tpi-agent-service\src\main\helm\charts\tpi-agent-service\cert\dev\truststore.jks" />
+      <env name="KAFKA_SSL_TRUSTSTORE_PASSWORD" value="genomica_2025" />
+      <env name="KAFKA_SSL_TRUSTSTORE_TYPE" value="JKS" />
+      <env name="KAFKA_SSL_KEYSTORE_LOCATION" value="C:\Users\A56691985\IdeaProjects\tpi-agent-service\src\main\helm\charts\tpi-agent-service\cert\dev\keystore.jks" />
+      <env name="KAFKA_SSL_KEYSTORE_PASSWORD" value="genomica_2025" />
+      <env name="KAFKA_SSL_KEYSTORE_TYPE" value="JKS" />
+      <env name="KAFKA_SSL_KEY_PASSWORD" value="genomica_2025" />
+      <env name="KAFKA_SSL_ENDPOINT_IDENTIFICATION_ALGORITHM" value="" />
+      <env name="PROGRESS_REPORT_INTERVAL_SECONDS" value="30" />
+      <env name="PROGRESS_MIN_PERCENTAGE_CHANGE" value="10.0" />
+      <env name="SPRING_PROFILES_ACTIVE" value="dev" />
+    </envs>
+    <option name="MAIN_CLASS_NAME" value="es.tsystems.genomics.tpiagent.TpiAgentApplication" />
+    <module name="tpi-agent-service" />
+    <method v="2">
+      <option name="Make" enabled="true" />
+    </method>
+  </configuration>
+</component>

@@ -1,0 +1,63 @@
+{{- if and .Values.storage.enabled (eq (.Values.storage.type | default "smb") "smb") .Values.storage.smb.enabled -}}
+{{- $mode := (.Values.storage.smb.provisioning | default "dynamic") -}}
+{{- if eq $mode "dynamic" -}}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ default (printf "%s-smb-pvc" .Values.application.name) .Values.storage.smb.pvcName | quote }}
+  namespace: {{ .Values.metadata.namespace }}
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: {{ default (printf "%s-smb" .Release.Name) .Values.storage.smb.storageClassName | quote }}
+  resources:
+    requests:
+      storage: {{ default "10Gi" .Values.storage.smb.size | quote }}
+{{- else -}}
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: {{ default (printf "%s-smb-pv" .Values.application.name) .Values.storage.smb.pvName | quote }}
+  labels:
+    app: {{ .Values.application.name }}
+spec:
+  capacity:
+    # Para volúmenes SMB el tamaño es más una formalidad, pero Kubernetes lo requiere.
+    storage: {{ default "10Gi" .Values.storage.smb.size | quote }}
+  accessModes:
+    - ReadWriteMany
+  persistentVolumeReclaimPolicy: {{ default "Retain" .Values.storage.smb.reclaimPolicy }}
+  storageClassName: ""
+  mountOptions:
+{{- with .Values.storage.smb.mountOptions }}
+{{ toYaml . | indent 4 }}
+{{- else }}
+    - dir_mode=0777
+    - file_mode=0777
+    - vers=3.0
+{{- end }}
+  csi:
+    driver: smb.csi.k8s.io
+    volumeHandle: {{ default (printf "%s-smb" .Values.application.name) .Values.storage.smb.volumeHandle | quote }}
+    readOnly: false
+    volumeAttributes:
+      source: {{ required "storage.smb.share es obligatorio cuando storage.enabled=true y storage.smb.enabled=true" .Values.storage.smb.share | replace "\\\\" "//" | replace "\\" "/" | quote }}
+    nodeStageSecretRef:
+      name: {{ required "storage.smb.secretName es obligatorio cuando storage.enabled=true y storage.smb.enabled=true" .Values.storage.smb.secretName }}
+      namespace: {{ .Values.metadata.namespace }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ default (printf "%s-smb-pvc" .Values.application.name) .Values.storage.smb.pvcName | quote }}
+  namespace: {{ .Values.metadata.namespace }}
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: ""
+  volumeName: {{ default (printf "%s-smb-pv" .Values.application.name) .Values.storage.smb.pvName | quote }}
+  resources:
+    requests:
+      storage: {{ default "10Gi" .Values.storage.smb.size | quote }}
+{{- end -}}
+{{- end -}}

@@ -1,0 +1,133 @@
+# Valores por defecto para desplegar Apache NiFi utilizando el operador de Stackable.
+# Personaliza estos valores combinándolos con `values-common.yaml` y los
+# ficheros específicos de cada entorno según sea necesario.
+
+global:
+  imageRegistry: mtr.devops.telekom.de/genomica
+  imagePullSecrets:
+    - name: mtr-credentials
+
+operators:
+  namespace: stackable-operators
+  createNamespace: true
+  # Los operadores usarán las imágenes por defecto de Stackable desde OCI
+  commons:
+    enabled: true
+  secret:
+    enabled: true
+  listener:
+    enabled: true
+  nifi:
+    enabled: true
+
+# Configuración mínima para operadores (usan imágenes por defecto de Stackable)
+commonsOperator:
+  fullnameOverride: "commons-operator"
+
+secretOperator:
+  fullnameOverride: "secret-operator"
+  # Deshabilitar migración de secretos
+  secretMigration:
+    enabled: false
+
+listenerOperator:
+  fullnameOverride: "listener-operator"
+
+nifiOperator:
+  fullnameOverride: "nifi-operator"
+
+nifi:
+  namespace: tpi
+  createNamespace: true
+  stackableVersion: "24.11.0"
+  # Configuración de imagen de NiFi desde MTR
+  image:
+    repository: mtr.devops.telekom.de/genomica/nifi
+    tag: "1.27.0"
+    pullPolicy: IfNotPresent
+  service:
+    name: ""
+    port: 8443
+  network:
+    http:
+      port: 8443
+  # Configuración de ingress
+  ingress:
+    enabled: false  # Deshabilitado por defecto
+    className: ""
+    annotations: {}
+    hosts: []
+    tls: []
+  # Configuración de IngressRoute (Traefik)
+  ingressRoute:
+    enabled: false  # Deshabilitado por defecto
+    host: ""
+    path: "/nifi"
+  # Configuración de autenticación
+  auth:
+    singleUser:
+      enabled: true
+      createSecret: true
+      username: "admin"
+      password: "genomica_2025%"
+      secretName: "nifi-single-user"
+      authenticationClass: ""  # Si está vacío, se generará automáticamente
+  # Configuración de propiedades sensibles
+  sensitiveProperties:
+    keySecret: ""  # Si está vacío, se generará automáticamente
+    autoGenerate: true
+  # Configuración del cluster
+  cluster:
+    enabled: true
+    replicas: 1
+  # Configuración de recursos
+  resources:
+    cpu:
+      min: "500m"
+      max: "2"
+    memory:
+      limit: "2Gi"
+
+  # Recursos del contenedor (Kubernetes requests/limits) vía podOverrides.
+  # Útil cuando el operador no traslada `nodes.roleGroups.*.config.resources` a Pod resources.
+  podResources:
+    enabled: false
+    containerName: "nifi"
+    requests:
+      cpu: "500m"
+      memory: "4Gi"
+    limits:
+      cpu: "2"
+      memory: "8Gi"
+  # Configuración de almacenamiento
+  storage:
+    contentRepo:
+      capacity: "10Gi"
+      storageClass: "gp3"
+    flowfileRepo:
+      capacity: "2Gi"
+      storageClass: "gp3"
+    provenanceRepo:
+      capacity: "3Gi"
+      storageClass: "gp3"
+    databaseRepo:
+      capacity: "1Gi"
+      storageClass: "gp3"
+    stateRepo:
+      capacity: "1Gi"
+      storageClass: "gp3"
+
+zookeeper:
+  enabled: true
+  tls:
+    clientEnabled: true
+  name: zk
+  image:
+    repo: "oci.stackable.tech/sdp"
+    productVersion: "3.9.2"
+  replicas: 1
+  # PVC opcional. Déjalo desactivado si no lo necesitas.
+  storage:
+    enabled: true
+    size: "1Gi"
+    storageClass: "gp3"

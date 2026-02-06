@@ -1,0 +1,7 @@
+# Logs
+*.log
+logs/
+
+# Sensitive files
+**/setup-mtr-access.bat
+

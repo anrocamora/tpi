@@ -1,0 +1,48 @@
+{{- if .Values.nifi.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "nifi.fullname" . }}
+  namespace: {{ include "nifi.namespace" . }}
+  labels:
+{{ include "nifi.labels" . | indent 4 }}
+{{- with .Values.nifi.ingress.annotations }}
+  annotations:
+{{ toYaml . | indent 4 }}
+{{- end }}
+spec:
+{{- with .Values.nifi.ingress.className }}
+  ingressClassName: {{ . | quote }}
+{{- end }}
+  rules:
+{{- if .Values.nifi.ingress.hosts }}
+{{- range .Values.nifi.ingress.hosts }}
+    - host: {{ .host | quote }}
+      http:
+        paths:
+{{- range .paths }}
+          - path: {{ .path | quote }}
+            pathType: {{ .pathType | default "Prefix" }}
+            backend:
+              service:
+                name: {{ .serviceName | default (include "nifi.serviceName" $) | quote }}
+                port:
+                  number: {{ .servicePort | default $.Values.nifi.service.port }}
+{{- end }}
+{{- end }}
+{{- else }}
+    - http:
+        paths:
+          - path: {{ .Values.nifi.ingress.path | quote }}
+            pathType: {{ .Values.nifi.ingress.pathType | default "Prefix" }}
+            backend:
+              service:
+                name: {{ include "nifi.serviceName" . | quote }}
+                port:
+                  number: {{ .Values.nifi.service.port }}
+{{- end }}
+{{- if .Values.nifi.ingress.tls }}
+  tls:
+{{ toYaml .Values.nifi.ingress.tls | indent 4 }}
+{{- end }}
+{{- end }}

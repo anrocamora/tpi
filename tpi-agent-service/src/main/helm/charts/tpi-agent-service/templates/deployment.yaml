@@ -1,0 +1,157 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.application.name }}
+  namespace: {{ .Values.metadata.namespace }}
+  labels:
+    app: {{ .Values.application.name }}
+spec:
+  replicas: {{ .Values.application.replicas }}
+  selector:
+    matchLabels:
+      app: {{ .Values.application.name }}
+  template:
+    metadata:
+      annotations:
+        checksum/all-values: {{ .Values | toYaml | sha256sum }}
+      labels:
+        app: {{ .Values.application.name }}
+    spec:
+      imagePullSecrets:
+        - name: mtr-credentials
+      containers:
+        - name: spring-boot-container
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: Always
+          env:
+            - name: SPRING_PROFILES_ACTIVE
+              value: "{{ .Values.spring.profiles.name }}"
+            - name: TZ
+              value: "Europe/Madrid"
+            - name: AGENT_ID
+              value: "{{ .Values.agent.id }}"
+            - name: AGENT_CLIENT
+              value: "{{ .Values.agent.client }}"
+            - name: AGENT_ENV
+              value: "{{ .Values.agent.env }}"
+            - name: AGENT_INBOX_DIR
+              value: "{{ .Values.agent.baseDir }}"
+            - name: AGENT_MOVE_DIRECTORY_DATASETS
+              value: "true"
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              value: "{{ .Values.kafka.bootstrapServers }}"
+            - name: KAFKA_MAX_REQUEST_SIZE
+              value: "{{ .Values.kafka.maxRequestSize | default "20971520" }}"
+            - name: KAFKA_BUFFER_MEMORY
+              value: "{{ .Values.kafka.bufferMemory | default "104857600" }}"
+            - name: KAFKA_MAX_PARTITION_FETCH_BYTES
+              value: "{{ .Values.kafka.maxPartitionFetchBytes | default "20971520" }}"
+            - name: KAFKA_FETCH_MAX_BYTES
+              value: "{{ .Values.kafka.fetchMaxBytes | default "52428800" }}"
+            {{- if .Values.kafka.ssl.enabled }}
+            - name: KAFKA_SECURITY_PROTOCOL
+              value: "SSL"
+            - name: KAFKA_SSL_TRUSTSTORE_LOCATION
+              value: "/app/certs/truststore.jks"
+            - name: KAFKA_SSL_TRUSTSTORE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.kafka.ssl.secretName }}
+                  key: truststore.password
+            - name: KAFKA_SSL_TRUSTSTORE_TYPE
+              value: "JKS"
+            - name: KAFKA_SSL_KEYSTORE_LOCATION
+              value: "/app/certs/keystore.jks"
+            - name: KAFKA_SSL_KEYSTORE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.kafka.ssl.secretName }}
+                  key: keystore.password
+            - name: KAFKA_SSL_KEYSTORE_TYPE
+              value: "JKS"
+            - name: KAFKA_SSL_KEY_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.kafka.ssl.secretName }}
+                  key: key.password
+            - name: KAFKA_SSL_ENDPOINT_IDENTIFICATION_ALGORITHM
+              value: ""
+            {{- end }}
+            - name: AWS_ACCESS_KEY_ID
+              value: {{ .Values.aws.accessKeyId | quote }}
+            - name: AWS_SECRET_ACCESS_KEY
+              value: {{ .Values.aws.secretAccessKey | quote }}
+            - name: AWS_S3_BUCKET
+              value: "{{ .Values.aws.s3.bucket }}"
+            - name: AWS_S3_ENDPOINT
+              value: "{{ .Values.aws.s3.endpoint }}"
+            - name: AWS_REGION
+              value: "{{ .Values.aws.region }}"
+            - name: AWS_S3_BASE_PATH
+              value: "{{ .Values.aws.s3.basePath }}"
+            - name: AWS_PATH_STYLE_ACCESS
+              value: "{{ .Values.aws.s3.pathStyleAccess }}"
+            - name: AWS_USE_SINGLE_PART_UPLOAD
+              value: "{{ .Values.aws.s3.useSinglePartUpload | default false }}"
+            {{- if .Values.agent.upload }}
+            - name: AGENT_UPLOAD_CONCURRENT_UPLOADS
+              value: "{{ .Values.agent.upload.concurrentUploads | default 10 }}"
+            {{- end }}
+          resources:
+            limits:
+              memory: "{{ .Values.resources.limits.memory }}"
+              cpu: "{{ .Values.resources.limits.cpu }}"
+            requests:
+              memory: "{{ .Values.resources.requests.memory }}"
+              cpu: "{{ .Values.resources.requests.cpu }}"
+          ports:
+            - containerPort: 8080
+              name: http
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8080
+            initialDelaySeconds: 180
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8080
+            initialDelaySeconds: 120
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+
+          volumeMounts:
+{{- if .Values.storage.enabled }}
+            - name: tpi-agent-data
+              mountPath: {{ .Values.agent.baseDir }}
+{{- end }}
+{{- if .Values.kafka.ssl.enabled }}
+            - name: kafka-certs
+              mountPath: /app/certs
+              readOnly: true
+{{- end }}
+      volumes:
+{{- if .Values.storage.enabled }}
+{{- $storageType := (.Values.storage.type | default "smb") -}}
+{{- if eq $storageType "local" }}
+        - name: tpi-agent-data
+          emptyDir: {}
+{{- else if eq $storageType "smb" }}
+        - name: tpi-agent-data
+          persistentVolumeClaim:
+            claimName: {{ default (printf "%s-smb-pvc" .Values.application.name) .Values.storage.smb.pvcName | quote }}
+{{- else if eq $storageType "nfs" }}
+        - name: tpi-agent-data
+          persistentVolumeClaim:
+            claimName: {{ default (printf "%s-nfs-pvc" .Values.application.name) .Values.storage.nfs.pvcName | quote }}
+{{- end }}
+{{- end }}
+{{- if .Values.kafka.ssl.enabled }}
+        - name: kafka-certs
+          secret:
+            secretName: {{ .Values.kafka.ssl.secretName }}
+{{- end }}

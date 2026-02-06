@@ -1,0 +1,6 @@
+Thank you for installing the NiFi chart.
+
+A NiFiCluster custom resource has been created. Verify its status with:
+  kubectl get nificluster {{ include "nifi.fullname" . }} -n {{ include "nifi.namespace" . }}
+
+If ingress is enabled, the NiFi UI is reachable via the configured host at path {{ .Values.nifi.ingress.path | default "/nifi" }}.

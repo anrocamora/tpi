@@ -1,0 +1,45 @@
+{{- if .Values.zookeeper.enabled }}
+---
+apiVersion: zookeeper.stackable.tech/v1alpha1
+kind: ZookeeperCluster
+metadata:
+  name: {{ .Values.zookeeper.name }}
+  namespace: {{ include "nifi.namespace" . }}
+spec:
+  image:
+    productVersion: {{ .Values.zookeeper.image.productVersion | quote }}
+    {{- if .Values.zookeeper.image.repo }}
+    repo: {{ .Values.zookeeper.image.repo | quote }}
+    {{- end }}
+  {{- if (and .Values.zookeeper.tls (.Values.zookeeper.tls.disableClient)) }}
+  clusterConfig:
+    tls:
+      # Desactiva TLS de cliente → puerto 2181
+      serverSecretClass: null
+  {{- end }}
+  servers:
+    roleGroups:
+      default:
+        replicas: {{ .Values.zookeeper.replicas }}
+        {{- if .Values.zookeeper.storage.enabled }}
+        config:
+          resources:
+            storage:
+              data:
+                capacity: {{ .Values.zookeeper.storage.size | quote }}
+                {{- if .Values.zookeeper.storage.storageClass }}
+                storageClass: {{ .Values.zookeeper.storage.storageClass | quote }}
+                {{- end }}
+        {{- end }}
+---
+# --- ZNode específico para NiFi (aisla clientes) ---
+apiVersion: zookeeper.stackable.tech/v1alpha1
+kind: ZookeeperZnode
+metadata:
+  name: {{ include "nifi.fullname" . }}-znode
+  namespace: {{ include "nifi.namespace" . }}
+spec:
+  clusterRef:
+    name: {{ .Values.zookeeper.name }}
+    namespace: {{ include "nifi.namespace" . }}
+{{- end }}

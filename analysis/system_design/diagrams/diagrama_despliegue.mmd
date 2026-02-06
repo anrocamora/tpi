@@ -1,0 +1,129 @@
+graph TB
+    subgraph Externa["INFRAESTRUCTURA EXTERNA"]
+        Sec[Secuenciadores<br/>MiSeq/NextSeq]
+        Red[Unidad Red SMB/CIFS<br/>\\DC1GPRONAS007\MISEQ_PRE]
+        Sec --> Red
+    end
+
+    subgraph K8s["CLUSTER KUBERNETES"]
+        subgraph TpiNS["Namespace: tpi"]
+            subgraph AgentComp["Agent Component"]
+                AgentDep["Deployment: tpi-agent"]
+                AgentSvc["TPI Agent Service<br/>Java 24 + Spring Boot 3.2.5"]
+                Sched["DirectoryUploadScheduler<br/>@Scheduled 30s"]
+                Upload["UploadService<br/>multipart, 10 threads"]
+                State["UploadStateStore<br/>Kafka state topic"]
+                Producer["KafkaProducer<br/>eventos UPLOAD_*"]
+                AgentPVC["PersistentVolumeClaim<br/>Montaje SMB/CIFS"]
+
+                AgentDep --> AgentSvc
+                AgentSvc --> Sched
+                AgentSvc --> Upload
+                AgentSvc --> State
+                AgentSvc --> Producer
+                AgentPVC -.->|montado en| AgentSvc
+            end
+
+            subgraph KafkaComp["Kafka Component"]
+                KafkaSts["StatefulSet: kafka-cluster"]
+                KafkaE["Kafka Events v1<br/>7d TTL"]
+                KafkaS["Kafka State Topic<br/>compactado ∞"]
+                KafkaPVC["PersistentVolumeClaim<br/>Datos Kafka"]
+
+                KafkaSts --> KafkaE
+                KafkaSts --> KafkaS
+                KafkaPVC -.->|montado en| KafkaSts
+            end
+
+            subgraph AirflowComp["Airflow Component"]
+                AirflowDep["Deployment: airflow-scheduler"]
+                DAG["Apache Airflow DAG<br/>DAG_TSUPREME_001_TPIAGENT_UPLOADS"]
+                Tasks["- check_nifi_availability<br/>- start_nifi_pipeline<br/>- monitor_nifi_pipeline<br/>- wait_before_stop / wait_forever<br/>- stop_nifi_pipeline<br/>- trigger_emergency_stop"]
+
+                AirflowDep --> DAG
+                DAG --> Tasks
+            end
+
+            subgraph NiFiComp["NiFi Component"]
+                NiFiSts["StatefulSet: nifi-cluster"]
+                PG["Process Group<br/>PG_TSUPREME_001_TPIAGENT_UPLOADS"]
+                Consumer["ConsumeKafkaRecord"]
+                Script["ExecuteScript Groovy"]
+                Parse["Parse Folder"]
+                Build["Build DIR/FILE Tasks"]
+                WaitNotify["Wait/Notify<br/>DistributedMapCache"]
+                Invoke["InvokeHTTP<br/>Tomic API"]
+
+                NiFiSts --> PG
+                PG --> Consumer
+                PG --> Script
+                Consumer --> Parse
+                Script --> Build
+                Build --> WaitNotify
+                WaitNotify --> Invoke
+            end
+        end
+
+        subgraph TCatalogNS["Namespace: tcatalog"]
+            CatalogSts["StatefulSet: tcatalog-db"]
+            DB[("Base de Datos TCatalog<br/>Entidades FILE/DIRECTORY<br/>Tags para búsqueda<br/>Relaciones path/uri")]
+            CatalogPVC["PersistentVolumeClaim<br/>Datos TCatalog"]
+
+            CatalogSts --> DB
+            CatalogPVC -.->|montado en| CatalogSts
+        end
+
+        subgraph TomicNS["Namespace: tomic"]
+            TomicDep["Deployment: tomic-engine"]
+            API["TomicEngine REST API v4"]
+            Login["POST /users/login<br/>JWT token"]
+            Create["POST /files/create<br/>DIRECTORY"]
+            Link["POST /files/link<br/>FILE + S3 URI"]
+            Update["POST /files/update<br/>tags: run_*, sample_*"]
+            TomicSvc["Service: tomic-api"]
+
+            TomicDep --> API
+            API --> Login
+            API --> Create
+            API --> Link
+            API --> Update
+            TomicSvc -.->|expone| API
+        end
+    end
+
+    subgraph Storage["ALMACENAMIENTO EXTERNO"]
+        S3["S3 THealthLake<br/>agent/source_id/agent_id/run_id/<br/>AWS S3 Compatible"]
+    end
+
+    %% Flujos principales
+    Red -.->|montado vía PVC| AgentPVC
+    Upload --> S3
+    Producer --> KafkaE
+    State --> KafkaS
+
+    Tasks -.->|Start/Stop vía NiFi API| PG
+    Consumer --> KafkaE
+    Invoke --> TomicSvc
+    API --> DB
+
+    classDef externa fill:#e1f5ff,stroke:#0277bd
+    classDef k8s fill:#f0f0f0,stroke:#424242
+    classDef tpiNs fill:#e8f5e9,stroke:#2e7d32
+    classDef agent fill:#c8e6c9,stroke:#388e3c
+    classDef kafka fill:#fff59d,stroke:#f57c00
+    classDef airflow fill:#ce93d8,stroke:#7b1fa2
+    classDef nifi fill:#90caf9,stroke:#1976d2
+    classDef tcatalog fill:#ffe0b2,stroke:#e65100
+    classDef tomic fill:#ffccbc,stroke:#d84315
+    classDef storage fill:#fff9c4,stroke:#f57c00
+
+    class Sec,Red externa
+    class K8s k8s
+    class TpiNS tpiNs
+    class AgentComp,AgentDep,AgentSvc,Sched,Upload,State,Producer,AgentPVC agent
+    class KafkaComp,KafkaSts,KafkaE,KafkaS,KafkaPVC kafka
+    class AirflowComp,AirflowDep,DAG,Tasks airflow
+    class NiFiComp,NiFiSts,PG,Consumer,Script,Parse,Build,WaitNotify,Invoke nifi
+    class TCatalogNS,CatalogSts,DB,CatalogPVC tcatalog
+    class TomicNS,TomicDep,API,Login,Create,Link,Update,TomicSvc tomic
+    class S3,Storage storage

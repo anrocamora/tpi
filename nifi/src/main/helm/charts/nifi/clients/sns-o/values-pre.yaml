@@ -1,0 +1,79 @@
+# Despliegue en entorno de desarrollo
+enabledReleases:
+  - nifi
+
+# entorno pre
+environment: pre
+
+# aquí overrides específicos de pre (replicas, resources, etc.)
+nifi:
+  cluster:
+    enabled: true
+    replicas: 1
+
+  # CRÍTICO: Agregar TODOS los posibles hostnames
+  configOverrides:
+    nifi.properties:
+      nifi.web.https.host: nifi-node-default-0.nifi-node-default.tpi.svc.cluster.local
+      nifi.web.https.context.path: /nifi
+      nifi.web.proxy.host: >-
+        localhost:8443,
+        localhost,
+        127.0.0.1,
+        pregenomica-app.admon-cfnavarra.es,
+        pregenomica-app.admon-cfnavarra.es:443,
+        nifi-node-default-0.nifi-node-default.tpi.svc.cluster.local:8443,
+        nifi-node-default-0.nifi-node-default.tpi.svc.cluster.local,
+        nifi-node-default.tpi.svc.cluster.local:8443,
+        nifi-node-default.tpi.svc.cluster.local,
+        nifi.tpi.svc.cluster.local:8443,
+        nifi.tpi.svc.cluster.local,
+        nifi-reporting-task.tpi.svc.cluster.local:8443,
+        nifi-reporting-task.tpi.svc.cluster.local
+
+  resources:
+    cpu:
+      min: "500m"
+      max: "2000m"
+    memory:
+      limit: "8Gi"
+
+  storage:
+    contentRepo:
+      capacity: "10Gi"
+      storageClass: "local-path"
+    flowfileRepo:
+      capacity: "10Gi"
+      storageClass: "local-path"
+    provenanceRepo:
+      capacity: "10Gi"
+      storageClass: "local-path"
+    databaseRepo:
+      capacity: "1Gi"
+      storageClass: "local-path"
+    stateRepo:
+      capacity: "1Gi"
+      storageClass: "local-path"
+
+  ingress:
+    enabled: false
+
+  ingressRoute:
+    enabled: true
+    host: "pregenomica-app.admon-cfnavarra.es"
+    path: "/nifi"
+
+zookeeper:
+  storage:
+    enabled: true
+    size: "1Gi"
+    storageClass: "local-path"
+
+pipelineImporter:
+  gitRepo: "https://github.com/TSIB-Arch/genomics-cicd.git"
+  gitBranch: "main"
+  pipelinesPath: "nifi/sns-o/pre/pipelines/sns-o/pre"
+  pollInterval: "300"
+  gitCredentials:
+    username: ""  # Set via external secret or CI/CD
+    password: ""  # Set via external secret or CI/CD

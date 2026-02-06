@@ -1,0 +1,16 @@
+sequenceDiagram
+    participant Op as Operador
+    participant Fs as Unidad de red
+    participant Ag as TPI Agent
+    participant S3 as S3
+    participant K as Kafka
+
+    Op->>Fs: Copia run completo + RunCompletionStatus.xml
+    Ag->>Fs: Escaneo periódico (30s)
+    Ag->>K: UPLOAD_STARTED (+folder opcional)
+    loop cada fichero
+      Ag->>S3: upload (single-part o multipart)
+      Ag->>K: UPLOAD_PROGRESS
+    end
+    Ag->>K: UPLOAD_COMPLETED (+folder completo)
+    Ag->>Fs: mover run a completed/

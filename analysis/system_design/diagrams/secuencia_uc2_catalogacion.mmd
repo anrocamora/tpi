@@ -1,0 +1,23 @@
+sequenceDiagram
+    participant N as NiFi
+    participant T as Tomic API
+    participant C as Cache Token
+
+    N->>C: get token (cache)
+    alt token ausente/expirado
+      N->>T: POST /users/login
+      T-->>N: JWT
+      N->>C: put JWT
+    end
+
+    loop cada directorio (orden padre->hijo)
+      N->>T: POST /files/create (DIRECTORY)
+      T-->>N: 200/409
+    end
+
+    loop cada fichero
+      N->>T: POST /files/link
+      T-->>N: 200/409
+      N->>T: POST /files/update (tags run/sample)
+      T-->>N: 200
+    end

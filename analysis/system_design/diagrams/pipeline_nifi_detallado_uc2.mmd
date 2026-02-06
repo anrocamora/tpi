@@ -1,0 +1,19 @@
+graph TD
+    CK[ConsumeKafkaRecord] --> FLT{eventType==UPLOAD_COMPLETED}
+    FLT -->|sí| PARSE[Parse árbol Folder recursivo]
+    FLT -->|no| DROP[Drop/ignore]
+
+    PARSE --> DQ[Build queue directorios padre->hijo]
+    PARSE --> FQ[Build queue ficheros]
+
+    DQ --> AUTH[Ensure JWT token cacheado]
+    AUTH --> CR[InvokeHTTP POST /files/create]
+
+    FQ --> LK[InvokeHTTP POST /files/link]
+    LK --> TG[InvokeHTTP POST /files/update tags]
+
+    CR --> OK[Success]
+    TG --> OK
+    CR --> ERR[Retry/penalize/DLQ]
+    LK --> ERR
+    TG --> ERR

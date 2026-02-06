@@ -1,0 +1,9 @@
+graph TD
+    P[Processor InvokeHTTP] --> R{HTTP status}
+    R -->|2xx| OK[success]
+    R -->|409| IDEM[idempotent success]
+    R -->|429/5xx| RETRY[retry con backoff]
+    R -->|4xx no recuperable| DLQ[enviar a DLQ]
+    RETRY --> LIM{max reintentos}
+    LIM -->|no| P
+    LIM -->|sí| DLQ

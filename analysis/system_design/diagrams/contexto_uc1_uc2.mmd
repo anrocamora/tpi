@@ -1,0 +1,11 @@
+graph TB
+    U[Usuario operador] --> SMB[Unidad de red SMB/CIFS]
+    SMB --> AG[TPI Agent]
+    AG -->|multipart upload| S3[THealthLake S3]
+    AG -->|UPLOAD_*| KE[Kafka Events]
+    AG -->|estado compactado| KS[Kafka State]
+
+    AF[Airflow DAG] -->|start/monitor/stop| NF[NiFi PG]
+    NF -->|consume UPLOAD_COMPLETED| KE
+    NF -->|create/link/update| TO[Tomic API]
+    TO --> DB[(TCatalog)]

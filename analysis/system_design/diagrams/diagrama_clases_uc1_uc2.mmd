@@ -1,0 +1,86 @@
+classDiagram
+    class DirectoryUploadScheduler {
+      +scanAndSchedule()
+      +isRunReady(runPath) bool
+    }
+
+    class UploadService {
+      +uploadRun(runPath)
+      +uploadFile(filePath)
+      +completeRun(uploadId)
+      +failRun(uploadId,error)
+    }
+
+    class UploadStateStore {
+      +initialize()
+      +saveState(uploadState)
+      +findInProgress()
+    }
+
+    class UploadEventPublisher {
+      +publishStarted(event)
+      +publishProgress(event)
+      +publishCompleted(event)
+      +publishFailed(event)
+    }
+
+    class UploadEvent {
+      +eventType
+      +uploadId
+      +agentId
+      +runId
+      +folder
+    }
+
+    class Folder {
+      +name
+      +url
+      +files[]
+      +folders[]
+    }
+
+    class AirflowDagController {
+      +check_nifi_availability()
+      +start_nifi_pipeline()
+      +monitor_nifi_pipeline()
+      +stop_nifi_pipeline()
+    }
+
+    class NiFiCatalogPipeline {
+      +consumeUploadCompleted()
+      +parseFolderTree()
+      +createDirectories()
+      +linkFiles()
+      +updateTags()
+    }
+
+    class TokenCache {
+      +get()
+      +put(token)
+      +isExpired() bool
+    }
+
+    class TomicApiClient {
+      +login()
+      +createDirectory()
+      +linkFile()
+      +updateFileTags()
+    }
+
+    class DLQHandler {
+      +handleRecoverable()
+      +handleNonRecoverable()
+    }
+
+    DirectoryUploadScheduler --> UploadService
+    DirectoryUploadScheduler --> UploadStateStore
+    UploadService --> UploadStateStore
+    UploadService --> UploadEventPublisher
+    UploadEventPublisher --> UploadEvent
+    UploadEvent --> Folder
+
+    AirflowDagController --> NiFiCatalogPipeline
+    NiFiCatalogPipeline --> TokenCache
+    NiFiCatalogPipeline --> TomicApiClient
+    NiFiCatalogPipeline --> DLQHandler
+    NiFiCatalogPipeline --> UploadEvent : consumes

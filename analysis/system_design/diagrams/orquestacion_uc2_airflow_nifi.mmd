@@ -1,0 +1,9 @@
+graph LR
+    C[check_nifi_availability] --> S[start_nifi_pipeline]
+    S --> M[monitor_nifi_pipeline]
+    M --> W{stop_after_minutes}
+    W -->|>0| T[wait_before_stop]
+    W -->|-1| I[wait_forever]
+    T --> P[stop_nifi_pipeline]
+    I --> P
+    P --> E[trigger_emergency_stop_dag]

@@ -1,0 +1,23 @@
+%% Recuperación de subidas tras reinicio del agente
+sequenceDiagram
+    participant Ag as TPI Agent (arranque)
+    participant St as UploadStateStore (Kafka compactado)
+    participant S3 as S3
+    participant K as Kafka Events
+
+    Ag->>St: findInProgress()
+    St-->>Ag: uploads IN_PROGRESS/STARTED
+
+    loop cada upload pendiente
+      Ag->>S3: listParts / headObject
+      alt upload ya completado en S3
+        Ag->>K: publish UPLOAD_COMPLETED (idempotente)
+      else partes faltantes
+        Ag->>S3: reanudar UploadPart restantes
+        Ag->>S3: CompleteMultipartUpload
+        Ag->>K: publish UPLOAD_COMPLETED
+      else error irrecuperable
+        Ag->>S3: AbortMultipartUpload
+        Ag->>K: publish UPLOAD_FAILED
+      end
+    end

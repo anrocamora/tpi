@@ -1,0 +1,40 @@
+%% Vista de observabilidad extremo a extremo
+flowchart TB
+    subgraph Fuentes
+      AG[TPI Agent]
+      NF[NiFi]
+      AF[Airflow]
+      S3[S3]
+      KE[Kafka]
+    end
+
+    subgraph Telemetria
+      LOGS[(Logs centralizados)]
+      MET[(Métricas Prometheus)]
+      TR[(Trazas / Correlation IDs)]
+    end
+
+    subgraph Operacion
+      DASH[Dashboards UC-001/UC-002]
+      ALERT[Alertmanager / On-call]
+      RUNB[Runbooks SRE]
+    end
+
+    AG --> LOGS
+    NF --> LOGS
+    AF --> LOGS
+
+    AG --> MET
+    NF --> MET
+    KE --> MET
+    S3 --> MET
+
+    AG --> TR
+    NF --> TR
+
+    LOGS --> DASH
+    MET --> DASH
+    TR --> DASH
+
+    DASH --> ALERT
+    ALERT --> RUNB

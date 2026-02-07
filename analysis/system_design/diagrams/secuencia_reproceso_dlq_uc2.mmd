@@ -1,0 +1,22 @@
+%% Reproceso manual/automático de mensajes DLQ en UC-DS-002
+sequenceDiagram
+    participant Op as Operación/SRE
+    participant DLQ as Kafka DLQ
+    participant RP as Replay Job
+    participant NF as NiFi PG
+    participant TO as Tomic API
+
+    Op->>DLQ: identificar mensajes por runId/uploadId
+    Op->>RP: lanzar replay controlado
+    RP->>DLQ: consume batch DLQ
+    loop por mensaje
+      RP->>NF: reinyectar UploadEvent
+      NF->>TO: create/link/update
+      alt éxito 2xx/409
+        NF-->>RP: ACK éxito
+      else error persistente
+        NF-->>RP: NACK + causa
+        RP->>DLQ: mantener/enriquecer mensaje
+      end
+    end
+    RP-->>Op: reporte de reproceso y pendientes

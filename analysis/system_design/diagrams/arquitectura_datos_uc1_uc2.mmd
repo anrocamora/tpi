@@ -1,0 +1,29 @@
+%% Arquitectura de datos y linaje UC-DS-001/002
+flowchart LR
+    subgraph Origen
+      SMB[SMB/NFS Run Folder]
+    end
+
+    subgraph UC1[UC-DS-001 · Upload]
+      AG[TPI Agent]
+      S3[(S3 Landing Zone)]
+      KE[(Kafka Events)]
+      KS[(Kafka State Compactado)]
+    end
+
+    subgraph UC2[UC-DS-002 · Catalogación]
+      NF[NiFi PG]
+      TC[(TCatalog / OpenCGA)]
+      DLQ[(Kafka DLQ)]
+    end
+
+    SMB -->|árbol de ficheros| AG
+    AG -->|multipart/single upload| S3
+    AG -->|UPLOAD_* Avro| KE
+    AG -->|estado de upload| KS
+
+    KE -->|UPLOAD_COMPLETED| NF
+    NF -->|create/link/update tags| TC
+    NF -->|errores no recuperables| DLQ
+
+    S3 -. URL canónica/objeto .-> NF

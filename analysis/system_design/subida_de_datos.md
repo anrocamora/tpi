@@ -16,12 +16,15 @@
     * [6.4 Reglas de particionado multipart](#64-reglas-de-particionado-multipart)
     * [6.5 Eventos y contrato Kafka](#65-eventos-y-contrato-kafka)
     * [6.6 Riesgos técnicos y mitigaciones](#66-riesgos-técnicos-y-mitigaciones)
+    * [6.7 Recuperación tras reinicio del agente](#67-recuperación-tras-reinicio-del-agente)
   * [7. UC-DS-002 — Catalogación de ficheros](#7-uc-ds-002--catalogación-de-ficheros)
     * [7.1 Orquestación Airflow](#71-orquestación-airflow)
     * [7.2 Diseño funcional de pipeline NiFi](#72-diseño-funcional-de-pipeline-nifi)
     * [7.3 Secuencia de catalogación en Tomic](#73-secuencia-de-catalogación-en-tomic)
     * [7.4 Idempotencia, concurrencia y orden](#74-idempotencia-concurrencia-y-orden)
     * [7.5 Gestión de errores y DLQ](#75-gestión-de-errores-y-dlq)
+    * [7.6 Máquina de estados de catalogación](#76-máquina-de-estados-de-catalogación)
+    * [7.7 Secuencia de reproceso desde DLQ](#77-secuencia-de-reproceso-desde-dlq)
   * [8. Arquitectura de datos](#8-arquitectura-de-datos)
   * [9. Operación, observabilidad y SRE](#9-operación-observabilidad-y-sre)
   * [10. Criterios de aceptación técnicos](#10-criterios-de-aceptación-técnicos)
@@ -268,6 +271,36 @@ Contrato mínimo esperado para activar UC-DS-002:
 | Run corrupto/incompleto | catálogo inconsistente | trigger estricto por `RunCompletionStatus.xml` |
 | Volumen alto de ficheros pequeños | latencia elevada | paralelismo acotado + eventos ligeros en progreso |
 
+### 6.7 Recuperación tras reinicio del agente
+
+```mermaid
+%% Fuente canónica: diagrams/secuencia_recuperacion_uc1_restart.mmd
+sequenceDiagram
+    participant Ag as TPI Agent (arranque)
+    participant St as UploadStateStore (Kafka compactado)
+    participant S3 as S3
+    participant K as Kafka Events
+
+    Ag->>St: findInProgress()
+    St-->>Ag: uploads IN_PROGRESS/STARTED
+
+    loop cada upload pendiente
+      Ag->>S3: listParts / headObject
+      alt upload ya completado en S3
+        Ag->>K: publish UPLOAD_COMPLETED (idempotente)
+      else partes faltantes
+        Ag->>S3: reanudar UploadPart restantes
+        Ag->>S3: CompleteMultipartUpload
+        Ag->>K: publish UPLOAD_COMPLETED
+      else error irrecuperable
+        Ag->>S3: AbortMultipartUpload
+        Ag->>K: publish UPLOAD_FAILED
+      end
+    end
+```
+
+Este flujo explicita cómo garantizar continuidad operacional sin duplicar cargas ni perder trazabilidad tras un reinicio inesperado del agente.
+
 ## 7. UC-DS-002 — Catalogación de ficheros
 
 ### 7.1 Orquestación Airflow
@@ -364,7 +397,132 @@ graph TD
     LIM -->|sí| DLQ
 ```
 
+### 7.6 Máquina de estados de catalogación
+
+```mermaid
+%% Fuente canónica: diagrams/estado_catalogacion_uc2.mmd
+stateDiagram-v2
+    [*] --> EVENT_RECEIVED
+    EVENT_RECEIVED --> VALIDATED: eventType=UPLOAD_COMPLETED
+    EVENT_RECEIVED --> DISCARDED: evento no relevante
+
+    VALIDATED --> DIRS_CREATED: create directory tree (padre->hijo)
+    DIRS_CREATED --> FILES_LINKED: link files en Tomic
+    FILES_LINKED --> TAGS_UPDATED: update metadata/tags
+    TAGS_UPDATED --> COMPLETED
+
+    VALIDATED --> RETRYING: 429/5xx
+    DIRS_CREATED --> RETRYING: 429/5xx
+    FILES_LINKED --> RETRYING: 429/5xx
+    TAGS_UPDATED --> RETRYING: 429/5xx
+
+    RETRYING --> VALIDATED: retry ok
+    RETRYING --> DLQ: max retries alcanzado
+
+    VALIDATED --> DLQ: 4xx no recuperable
+    DIRS_CREATED --> DLQ: 4xx no recuperable
+    FILES_LINKED --> DLQ: 4xx no recuperable
+    TAGS_UPDATED --> DLQ: 4xx no recuperable
+
+    COMPLETED --> [*]
+    DISCARDED --> [*]
+    DLQ --> [*]
+```
+
+### 7.7 Secuencia de reproceso desde DLQ
+
+```mermaid
+%% Fuente canónica: diagrams/secuencia_reproceso_dlq_uc2.mmd
+sequenceDiagram
+    participant Op as Operación/SRE
+    participant DLQ as Kafka DLQ
+    participant RP as Replay Job
+    participant NF as NiFi PG
+    participant TO as Tomic API
+
+    Op->>DLQ: identificar mensajes por runId/uploadId
+    Op->>RP: lanzar replay controlado
+    RP->>DLQ: consume batch DLQ
+    loop por mensaje
+      RP->>NF: reinyectar UploadEvent
+      NF->>TO: create/link/update
+      alt éxito 2xx/409
+        NF-->>RP: ACK éxito
+      else error persistente
+        NF-->>RP: NACK + causa
+        RP->>DLQ: mantener/enriquecer mensaje
+      end
+    end
+    RP-->>Op: reporte de reproceso y pendientes
+```
+
 ## 8. Arquitectura de datos
+
+```mermaid
+%% Fuente canónica: diagrams/arquitectura_datos_uc1_uc2.mmd
+flowchart LR
+    subgraph Origen
+      SMB[SMB/NFS Run Folder]
+    end
+
+    subgraph UC1[UC-DS-001 · Upload]
+      AG[TPI Agent]
+      S3[(S3 Landing Zone)]
+      KE[(Kafka Events)]
+      KS[(Kafka State Compactado)]
+    end
+
+    subgraph UC2[UC-DS-002 · Catalogación]
+      NF[NiFi PG]
+      TC[(TCatalog / OpenCGA)]
+      DLQ[(Kafka DLQ)]
+    end
+
+    SMB -->|árbol de ficheros| AG
+    AG -->|multipart/single upload| S3
+    AG -->|UPLOAD_* Avro| KE
+    AG -->|estado de upload| KS
+
+    KE -->|UPLOAD_COMPLETED| NF
+    NF -->|create/link/update tags| TC
+    NF -->|errores no recuperables| DLQ
+
+    S3 -. URL canónica/objeto .-> NF
+```
+
+```mermaid
+%% Fuente canónica: diagrams/clases_evento_upload_avro_uc1_uc2.mmd
+classDiagram
+    class UploadEvent {
+      +string eventType
+      +string uploadId
+      +string agentId
+      +string runId
+      +datetime timestamp
+      +Folder folder
+      +map~string,string~ metadata
+    }
+
+    class Folder {
+      +string name
+      +string url
+      +Folder[] folders
+      +FileRef[] files
+    }
+
+    class FileRef {
+      +string name
+      +string url
+      +long sizeBytes
+      +string checksum
+      +string checksumType
+      +map~string,string~ tags
+    }
+
+    UploadEvent --> Folder : root
+    Folder --> Folder : children
+    Folder --> FileRef : contains
+```
 
 **Evento de integración**: Avro `UploadEvent` con árbol recursivo `Folder`.
 
@@ -379,6 +537,49 @@ graph TD
 - tags operativos de trazabilidad (`source_id`, `agent_id`, etc.)
 
 ## 9. Operación, observabilidad y SRE
+
+```mermaid
+%% Fuente canónica: diagrams/observabilidad_sre_uc1_uc2.mmd
+flowchart TB
+    subgraph Fuentes
+      AG[TPI Agent]
+      NF[NiFi]
+      AF[Airflow]
+      S3[S3]
+      KE[Kafka]
+    end
+
+    subgraph Telemetria
+      LOGS[(Logs centralizados)]
+      MET[(Métricas Prometheus)]
+      TR[(Trazas / Correlation IDs)]
+    end
+
+    subgraph Operacion
+      DASH[Dashboards UC-001/UC-002]
+      ALERT[Alertmanager / On-call]
+      RUNB[Runbooks SRE]
+    end
+
+    AG --> LOGS
+    NF --> LOGS
+    AF --> LOGS
+
+    AG --> MET
+    NF --> MET
+    KE --> MET
+    S3 --> MET
+
+    AG --> TR
+    NF --> TR
+
+    LOGS --> DASH
+    MET --> DASH
+    TR --> DASH
+
+    DASH --> ALERT
+    ALERT --> RUNB
+```
 
 Métricas recomendadas:
 - UC-001: tiempo total de subida por run, throughput MB/s, ratio de fallos por fichero.

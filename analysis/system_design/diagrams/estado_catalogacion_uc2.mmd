@@ -1,0 +1,27 @@
+%% Máquina de estados de catalogación UC-DS-002
+stateDiagram-v2
+    [*] --> EVENT_RECEIVED
+    EVENT_RECEIVED --> VALIDATED: eventType=UPLOAD_COMPLETED
+    EVENT_RECEIVED --> DISCARDED: evento no relevante
+
+    VALIDATED --> DIRS_CREATED: create directory tree (padre->hijo)
+    DIRS_CREATED --> FILES_LINKED: link files en Tomic
+    FILES_LINKED --> TAGS_UPDATED: update metadata/tags
+    TAGS_UPDATED --> COMPLETED
+
+    VALIDATED --> RETRYING: 429/5xx
+    DIRS_CREATED --> RETRYING: 429/5xx
+    FILES_LINKED --> RETRYING: 429/5xx
+    TAGS_UPDATED --> RETRYING: 429/5xx
+
+    RETRYING --> VALIDATED: retry ok
+    RETRYING --> DLQ: max retries alcanzado
+
+    VALIDATED --> DLQ: 4xx no recuperable
+    DIRS_CREATED --> DLQ: 4xx no recuperable
+    FILES_LINKED --> DLQ: 4xx no recuperable
+    TAGS_UPDATED --> DLQ: 4xx no recuperable
+
+    COMPLETED --> [*]
+    DISCARDED --> [*]
+    DLQ --> [*]

@@ -1,0 +1,31 @@
+%% Modelo de clases del contrato UploadEvent (Avro)
+classDiagram
+    class UploadEvent {
+      +string eventType
+      +string uploadId
+      +string agentId
+      +string runId
+      +datetime timestamp
+      +Folder folder
+      +map~string,string~ metadata
+    }
+
+    class Folder {
+      +string name
+      +string url
+      +Folder[] folders
+      +FileRef[] files
+    }
+
+    class FileRef {
+      +string name
+      +string url
+      +long sizeBytes
+      +string checksum
+      +string checksumType
+      +map~string,string~ tags
+    }
+
+    UploadEvent --> Folder : root
+    Folder --> Folder : children
+    Folder --> FileRef : contains

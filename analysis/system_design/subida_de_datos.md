@@ -23,6 +23,8 @@
     * [7.3 Secuencia de catalogación en Tomic](#73-secuencia-de-catalogación-en-tomic)
     * [7.4 Idempotencia, concurrencia y orden](#74-idempotencia-concurrencia-y-orden)
     * [7.5 Gestión de errores y DLQ](#75-gestión-de-errores-y-dlq)
+    * [7.6 Máquina de estados de catalogación](#76-máquina-de-estados-de-catalogación)
+    * [7.7 Secuencia de reproceso desde DLQ](#77-secuencia-de-reproceso-desde-dlq)
   * [8. Arquitectura de datos](#8-arquitectura-de-datos)
   * [9. Operación, observabilidad y SRE](#9-operación-observabilidad-y-sre)
   * [10. Criterios de aceptación técnicos](#10-criterios-de-aceptación-técnicos)
@@ -395,6 +397,65 @@ graph TD
     LIM -->|sí| DLQ
 ```
 
+### 7.6 Máquina de estados de catalogación
+
+```mermaid
+%% Fuente canónica: diagrams/estado_catalogacion_uc2.mmd
+stateDiagram-v2
+    [*] --> EVENT_RECEIVED
+    EVENT_RECEIVED --> VALIDATED: eventType=UPLOAD_COMPLETED
+    EVENT_RECEIVED --> DISCARDED: evento no relevante
+
+    VALIDATED --> DIRS_CREATED: create directory tree (padre->hijo)
+    DIRS_CREATED --> FILES_LINKED: link files en Tomic
+    FILES_LINKED --> TAGS_UPDATED: update metadata/tags
+    TAGS_UPDATED --> COMPLETED
+
+    VALIDATED --> RETRYING: 429/5xx
+    DIRS_CREATED --> RETRYING: 429/5xx
+    FILES_LINKED --> RETRYING: 429/5xx
+    TAGS_UPDATED --> RETRYING: 429/5xx
+
+    RETRYING --> VALIDATED: retry ok
+    RETRYING --> DLQ: max retries alcanzado
+
+    VALIDATED --> DLQ: 4xx no recuperable
+    DIRS_CREATED --> DLQ: 4xx no recuperable
+    FILES_LINKED --> DLQ: 4xx no recuperable
+    TAGS_UPDATED --> DLQ: 4xx no recuperable
+
+    COMPLETED --> [*]
+    DISCARDED --> [*]
+    DLQ --> [*]
+```
+
+### 7.7 Secuencia de reproceso desde DLQ
+
+```mermaid
+%% Fuente canónica: diagrams/secuencia_reproceso_dlq_uc2.mmd
+sequenceDiagram
+    participant Op as Operación/SRE
+    participant DLQ as Kafka DLQ
+    participant RP as Replay Job
+    participant NF as NiFi PG
+    participant TO as Tomic API
+
+    Op->>DLQ: identificar mensajes por runId/uploadId
+    Op->>RP: lanzar replay controlado
+    RP->>DLQ: consume batch DLQ
+    loop por mensaje
+      RP->>NF: reinyectar UploadEvent
+      NF->>TO: create/link/update
+      alt éxito 2xx/409
+        NF-->>RP: ACK éxito
+      else error persistente
+        NF-->>RP: NACK + causa
+        RP->>DLQ: mantener/enriquecer mensaje
+      end
+    end
+    RP-->>Op: reporte de reproceso y pendientes
+```
+
 ## 8. Arquitectura de datos
 
 ```mermaid
@@ -427,6 +488,40 @@ flowchart LR
     NF -->|errores no recuperables| DLQ
 
     S3 -. URL canónica/objeto .-> NF
+```
+
+```mermaid
+%% Fuente canónica: diagrams/clases_evento_upload_avro_uc1_uc2.mmd
+classDiagram
+    class UploadEvent {
+      +string eventType
+      +string uploadId
+      +string agentId
+      +string runId
+      +datetime timestamp
+      +Folder folder
+      +map~string,string~ metadata
+    }
+
+    class Folder {
+      +string name
+      +string url
+      +Folder[] folders
+      +FileRef[] files
+    }
+
+    class FileRef {
+      +string name
+      +string url
+      +long sizeBytes
+      +string checksum
+      +string checksumType
+      +map~string,string~ tags
+    }
+
+    UploadEvent --> Folder : root
+    Folder --> Folder : children
+    Folder --> FileRef : contains
 ```
 
 **Evento de integración**: Avro `UploadEvent` con árbol recursivo `Folder`.

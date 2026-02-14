@@ -27,8 +27,17 @@
     * [7.7 Secuencia de reproceso desde DLQ](#77-secuencia-de-reproceso-desde-dlq)
   * [8. Arquitectura de datos](#8-arquitectura-de-datos)
   * [9. Operación, observabilidad y SRE](#9-operación-observabilidad-y-sre)
-  * [10. Criterios de aceptación técnicos](#10-criterios-de-aceptación-técnicos)
-  * [11. Decisiones de diseño (ADR-lite)](#11-decisiones-de-diseño-adr-lite)
+  * [10. Seguridad e integridad de datos](#10-seguridad-e-integridad-de-datos)
+    * [10.1 Integridad y completitud de datos](#101-integridad-y-completitud-de-datos)
+      * [Transmisión hacia S3 (UC-DS-001)](#transmisión-hacia-s3-uc-ds-001)
+      * [Mensajería con Kafka (UC-DS-001 y UC-DS-002)](#mensajería-con-kafka-uc-ds-001-y-uc-ds-002)
+    * [10.2 Encriptación en la transmisión](#102-encriptación-en-la-transmisión)
+      * [Transmisión hacia S3](#transmisión-hacia-s3)
+      * [Mensajería con Kafka](#mensajería-con-kafka)
+    * [10.3 Resumen de garantías](#103-resumen-de-garantías)
+    * [10.4 Verificación de integridad](#104-verificación-de-integridad)
+  * [11. Criterios de aceptación técnicos](#11-criterios-de-aceptación-técnicos)
+  * [12. Decisiones de diseño (ADR-lite)](#12-decisiones-de-diseño-adr-lite)
 <!-- TOC -->
 
 ## 1. Objetivo y alcance
@@ -590,7 +599,160 @@ Alertas recomendadas:
 - crecimiento continuo de DLQ;
 - token/login failures repetidos en Tomic.
 
-## 10. Criterios de aceptación técnicos
+## 10. Seguridad e integridad de datos
+
+El sistema implementa múltiples capas de seguridad para garantizar que los datos se transmiten de forma completa, íntegra y cifrada en ambos casos de uso (UC-DS-001 y UC-DS-002).
+
+### 10.1 Integridad y completitud de datos
+
+#### Transmisión hacia S3 (UC-DS-001)
+
+**Validación por Checksum (MD5)**
+- Se calcula el hash MD5 del archivo completo antes de subirlo a S3.
+- AWS S3 valida automáticamente este checksum durante la transmisión mediante el header `Content-MD5`.
+- Si hay cualquier corrupción o modificación durante la transferencia, S3 rechaza automáticamente la operación.
+- Garantiza integridad byte a byte del archivo.
+
+**Verificación del Tamaño**
+- Se establece el `Content-Length` exacto en cada petición de subida.
+- Tras completar la subida, se verifica mediante `headObject()` que el tamaño en S3 coincide con el original.
+- Cualquier discrepancia genera un error y se reinicia la transferencia.
+
+**Gestión de Reintentos Automáticos**
+- El AWS SDK implementa reintentos automáticos en caso de fallos de red.
+- Sistema de backoff exponencial (1s → 2s → 4s) entre reintentos.
+- Hasta 3 intentos por defecto por cada parte fallida.
+- Detección de transmisiones incompletas y reintento automático.
+
+#### Mensajería con Kafka (UC-DS-001 y UC-DS-002)
+
+**Confirmación de Entrega (ACKs)**
+- Kafka configurado con `acks=all` para garantizar replicación completa.
+- Los mensajes deben ser confirmados por todos los brokers in-sync antes de considerarse entregados.
+- Previene pérdida de mensajes en caso de fallo de un broker.
+
+**Idempotencia de Productores**
+- Productores configurados en modo idempotente (`enable.idempotence=true`).
+- Evita duplicados en caso de reintentos de red.
+- Cada mensaje tiene un ID único que Kafka usa para deduplicación.
+
+**Consumer Offsets y Garantías de Procesamiento**
+- Los consumidores confirman los offsets **solo tras procesar exitosamente** los mensajes.
+- En caso de error, el mensaje se reprocesa automáticamente.
+- Topic de estado compactado actúa como "base de datos" para recuperación.
+
+**Resultado**: Se garantiza que no se pierden eventos ni mensajes durante la transmisión del run.
+
+### 10.2 Encriptación en la transmisión
+
+Todos los datos viajan cifrados de extremo a extremo mediante TLS.
+
+#### Transmisión hacia S3
+
+**TLS/SSL (HTTPS) por Defecto**
+- El AWS SDK para Java utiliza **HTTPS automáticamente** para todas las comunicaciones.
+- Encriptación mediante TLS 1.2 o superior.
+- Los datos viajan cifrados desde el agente hasta los servidores de S3.
+
+**Configuración Explícita de Endpoints HTTPS**
+```java
+S3Client.builder()
+    .region(Region.EU_WEST_1)
+    .endpointOverride(URI.create("https://s3.eu-west-1.amazonaws.com"))
+    .build();
+```
+- Fuerza el uso de HTTPS, eliminando cualquier posibilidad de transmisión no cifrada.
+- Compatible con S3 de AWS y sistemas S3-compatible (NetApp, Dell EMC).
+
+**Encriptación en Reposo (Server-Side)**
+```yaml
+aws:
+  s3:
+    server-side-encryption: AES256  # SSE-S3
+```
+- Los datos se cifran automáticamente al almacenarlos en S3.
+- Encriptación AES-256 gestionada por AWS.
+- Transparente para el agente y los consumidores.
+
+#### Mensajería con Kafka
+
+**TLS en Tránsito**
+- Kafka configurado con `security.protocol=SSL` o `SASL_SSL`.
+- Todas las conexiones entre productores, brokers y consumidores usan TLS 1.2+.
+- Los mensajes viajan cifrados por la red.
+
+**Configuración en Spring Boot**:
+```yaml
+spring:
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS}
+    security:
+      protocol: SSL
+    ssl:
+      trust-store-location: classpath:kafka.truststore.jks
+      trust-store-password: ${KAFKA_TRUSTSTORE_PASSWORD}
+      key-store-location: classpath:kafka.keystore.jks
+      key-store-password: ${KAFKA_KEYSTORE_PASSWORD}
+    producer:
+      acks: all
+      enable.idempotence: true
+```
+
+**Autenticación SASL/SSL (Opcional)**
+- Implementación de SASL (Simple Authentication and Security Layer).
+- Verifica la identidad de productores y consumidores.
+- Previene acceso no autorizado a los topics de Kafka.
+
+### 10.3 Resumen de garantías
+
+| Aspecto | Mecanismo | Resultado |
+|---------|-----------|-----------|
+| **Integridad de archivos** | MD5 checksum + verificación de tamaño | ✅ Archivos completos y sin corrupción |
+| **Completitud de runs** | Flag `RunCompletionStatus.xml` + catálogo | ✅ Solo se suben runs completos |
+| **Integridad de mensajes** | Kafka acks=all + idempotencia | ✅ Sin pérdida ni duplicación |
+| **Encriptación S3** | HTTPS/TLS 1.2+ automático | ✅ Datos cifrados en tránsito |
+| **Encriptación Kafka** | SSL/TLS 1.2+ configurado | ✅ Mensajes cifrados en tránsito |
+| **Encriptación en reposo** | S3 SSE-AES256 | ✅ Datos cifrados almacenados |
+| **Recuperación de fallos** | Reintentos + reanudación | ✅ Resiliencia ante interrupciones |
+
+### 10.4 Verificación de integridad
+
+**Cómo verificar que un run se transmitió correctamente:**
+
+1. **Verificar tamaño en S3**:
+   ```bash
+   aws s3 ls s3://bucket/prefix/runId/ --recursive --summarize
+   ```
+   Comparar el `Total Size` con el tamaño del directorio original.
+
+2. **Verificar eventos en Kafka**:
+   - Buscar `UPLOAD_COMPLETED` para el run.
+   - El campo `totalBytesUploaded` debe coincidir con el tamaño del run.
+   - El catálogo (`folder`) lista todos los archivos subidos.
+
+3. **Logs del agente**:
+   ```
+   [INFO] ✓ Upload completed successfully: runId=M05089_155_000000000-CT8YM (20.5 GB in 59541 files)
+   ```
+
+4. **Directorio movido a `completed/`**:
+   ```
+   /data/uploads/tpi-agent-local/completed/M05089_155_000000000-CT8YM/
+   ```
+
+**Si hay algún problema:**
+- El run se mueve a `failed/` en lugar de `completed/`.
+- Se publica un evento `UPLOAD_FAILED` con el detalle del error.
+- Los logs muestran el motivo del fallo y las partes que fallaron.
+
+**Mejores prácticas operativas:**
+1. Monitorizar eventos Kafka para detectar fallos rápidamente.
+2. Verificar periódicamente que los tamaños en S3 coinciden con los originales.
+3. Configurar alertas sobre eventos `UPLOAD_FAILED`.
+4. Revisar logs ante cualquier anomalía en `completed/` o `failed/`.
+5. Mantener TLS actualizado en Kafka y S3 (mínimo TLS 1.2).
+
+## 11. Criterios de aceptación técnicos
 
 - Run detectado y transferido a S3 con estructura de paths preservada.
 - Publicación de eventos Kafka de inicio/progreso/fin.
@@ -598,7 +760,7 @@ Alertas recomendadas:
 - Reejecución segura (idempotente) sin duplicados funcionales dañinos.
 - Evidencia operativa en logs/metrics para auditoría.
 
-## 11. Decisiones de diseño (ADR-lite)
+## 12. Decisiones de diseño (ADR-lite)
 
 1. **Event-driven entre UC-001 y UC-002** para desacoplar tiempos de subida y catalogación.
 2. **Airflow para control de ciclo de vida de NiFi**, evitando acoplar control operativo al flujo de datos.
